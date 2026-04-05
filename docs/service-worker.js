@@ -1,4 +1,4 @@
-const CACHE_NAME = 'phone-studio-v1-1';
+const CACHE_NAME = 'phone-studio-v1-2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -34,7 +34,13 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('./index.html'))
+      fetch(event.request)
+        .then((response) => {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', responseClone));
+          return response;
+        })
+        .catch(() => caches.match('./index.html'))
     );
     return;
   }
@@ -44,12 +50,12 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request);
-    })
+    fetch(event.request)
+      .then((response) => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
