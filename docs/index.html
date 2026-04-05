@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a1a">
+    <meta name="description" content="Phone Studio - AI content studio">
+    <title>Phone Studio</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%23000' width='180' height='180'/><text x='50%' y='50%' font-size='80' fill='%23fff' text-anchor='middle' dominant-baseline='middle'>PS</text></svg>">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- iPhone-first PWA. Test on Safari with Locally AI app running. -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>📱 Phone Studio</h1>
+            <p class="subtitle">Screenshot → Text → Content</p>
+        </header>
+
+        <!-- Main Control Panel -->
+        <main class="main">
+            <!-- Step 1: Screenshot Upload -->
+            <section class="panel screenshot-panel">
+                <h2>Step 1: Screenshot</h2>
+                <div class="file-input-wrapper">
+                    <input type="file" id="screenshotInput" accept="image/*" class="hidden-input">
+                    <button id="uploadBtn" class="btn btn-primary">
+                        📷 Select Screenshot
+                    </button>
+                </div>
+                <img id="imagePreview" class="image-preview hidden" alt="Screenshot preview">
+            </section>
+
+            <!-- Step 2: OCR Processing -->
+            <section class="panel ocr-panel">
+                <h2>Step 2: Extract Text (OCR)</h2>
+                <button id="ocrBtn" class="btn btn-secondary" disabled>
+                    ⚙️ Run OCR
+                </button>
+                <div id="ocrStatus" class="status-message hidden" role="status"></div>
+            </section>
+
+            <!-- Step 3: Raw Text Review -->
+            <section class="panel text-panel">
+                <h2>Step 3: Extracted Text</h2>
+                <textarea id="rawText" class="textarea" placeholder="OCR output appears here..." readonly></textarea>
+            </section>
+
+            <!-- Step 4: LLM Processing -->
+            <section class="panel llm-panel">
+                <h2>Step 4: Send to Local LLM</h2>
+                <div class="llm-controls">
+                    <select id="llmPrompt" class="select">
+                        <option value="structure">Structure Content (JSON)</option>
+                        <option value="markdown">Convert to Markdown</option>
+                        <option value="caption">Generate Caption</option>
+                        <option value="ideas">Content Ideas</option>
+                        <option value="custom">Custom Prompt</option>
+                    </select>
+                    <textarea id="customPrompt" class="textarea textarea-small" placeholder="Custom prompt (optional)..." style="display:none;"></textarea>
+                </div>
+                <button id="llmBtn" class="btn btn-accent" disabled>
+                    🤖 Process with LLM
+                </button>
+                <div id="llmStatus" class="status-message hidden" role="status"></div>
+            </section>
+
+            <!-- Step 5: Output & JSON -->
+            <section class="panel output-panel">
+                <h2>Step 5: Final Output</h2>
+                <div class="output-tabs">
+                    <button class="tab-btn active" data-tab="json">JSON</button>
+                    <button class="tab-btn" data-tab="markdown">Markdown</button>
+                    <button class="tab-btn" data-tab="raw">Raw</button>
+                </div>
+                <textarea id="jsonOutput" class="textarea output-textarea" readonly></textarea>
+                <textarea id="markdownOutput" class="textarea output-textarea hidden" readonly></textarea>
+                <textarea id="rawOutput" class="textarea output-textarea hidden" readonly></textarea>
+            </section>
+
+            <!-- Step 6: Actions -->
+            <section class="panel actions-panel">
+                <h2>Step 6: Save & Next</h2>
+                <div class="action-buttons">
+                    <button id="downloadBtn" class="btn btn-secondary" disabled>
+                        📥 Download JSON
+                    </button>
+                    <button id="copyBtn" class="btn btn-secondary" disabled>
+                        📋 Copy JSON
+                    </button>
+                    <button id="resetBtn" class="btn btn-outline">
+                        🔄 Start Over
+                    </button>
+                </div>
+            </section>
+
+            <!-- Debug Panel -->
+            <section class="panel debug-panel">
+                <h2>Debug Info</h2>
+                <div class="debug-info">
+                    <p><strong>Endpoint:</strong> <span id="endpointDebug">http://localhost:8000</span></p>
+                    <p><strong>LLM Status:</strong> <span id="llmStatusDebug">Not connected</span></p>
+                    <p><strong>Tesseract Status:</strong> <span id="tesseractStatusDebug">Loading...</span></p>
+                    <p><strong>Storage:</strong> <span id="storageStatusDebug">Initializing...</span></p>
+                    <p><strong>Last Error:</strong> <span id="lastErrorDebug">None</span></p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
