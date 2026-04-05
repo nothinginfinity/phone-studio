@@ -33,6 +33,21 @@
 - Embedding vectors for similarity search
 - iOS Shortcuts automation
 
+## V2 - Batch Processing & Search
+
+**New Features:**
+- Bulk upload UI for photo batches
+- Batch OCR and optional LLM analysis
+- Local IndexedDB batch library
+- Full-text search across processed photos
+- Library stats and recent-item views
+
+**Key Components:**
+- `BatchDB`
+- `processBatchPhotos()`
+- Search and library tabs
+- Progress bar and queue state
+
 ## Storage Breakdown
 
 Per photo:

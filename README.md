@@ -109,6 +109,27 @@ Each photo becomes a self-contained knowledge unit:
 - Is easier to share with useful context intact
 - Sets up future automation and batch indexing
 
+## V2 Features - Batch Processing & Search
+
+- Process 10-50 photos at once
+- Automatic OCR on batch uploads
+- Batch LLM analysis
+- Optional batch variant generation
+- Local IndexedDB library
+- Full-text search across processed photos
+- Library stats and management
+
+### Workflow
+
+1. Go to `Batch Photo Processor`
+2. Click `Select Photos`
+3. Choose OCR, LLM, and optional variants
+4. Click `Start Batch Processing`
+5. Use the `Search Index` tab to search by keywords such as `credit`, `contract`, or `email`
+6. Use the `Photo Library` tab to review recent items and clear the index if needed
+
+All data stays local on the device. No backend required.
+
 ## GitHub Pages Deployment
 
 1. Create a public GitHub repository named `phone-studio`.

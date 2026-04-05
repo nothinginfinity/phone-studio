@@ -81,6 +81,77 @@ const ApiKeyManager = {
     }
 };
 
+const BatchDB = {
+    dbName: 'PhoneStudioBatch',
+    storeName: 'processed_photos',
+    indexStoreName: 'search_index',
+
+    async init() {
+        if (!window.idb?.openDB) {
+            throw new Error('IndexedDB helper failed to load.');
+        }
+
+        return window.idb.openDB(this.dbName, 1, {
+            upgrade(db) {
+                if (!db.objectStoreNames.contains('processed_photos')) {
+                    db.createObjectStore('processed_photos', { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains('search_index')) {
+                    db.createObjectStore('search_index', { keyPath: 'keyword' });
+                }
+            }
+        });
+    },
+
+    async savePhoto(photoData) {
+        const db = await this.init();
+        await db.put(this.storeName, photoData);
+    },
+
+    async getAll() {
+        const db = await this.init();
+        return db.getAll(this.storeName);
+    },
+
+    async getById(id) {
+        const db = await this.init();
+        return db.get(this.storeName, id);
+    },
+
+    async search(query) {
+        const db = await this.init();
+        const all = await db.getAll(this.storeName);
+        const searchText = query.toLowerCase();
+
+        return all.filter((photo) => {
+            const keywordPool = [
+                ...(photo.keywords || []),
+                ...(photo.photo_keywords || []),
+                ...(photo.compressed_index?.keywords || []),
+                ...(photo.compressed_index?.concepts || [])
+            ].join(' ').toLowerCase();
+
+            return (photo.raw_text || '').toLowerCase().includes(searchText) ||
+                (photo.llm_output || '').toLowerCase().includes(searchText) ||
+                (photo.metadata_string || '').toLowerCase().includes(searchText) ||
+                keywordPool.includes(searchText);
+        });
+    },
+
+    async clear() {
+        const db = await this.init();
+        await db.clear(this.storeName);
+        await db.clear(this.indexStoreName);
+    }
+};
+
+let batchState = {
+    queue: [],
+    currentIndex: 0,
+    isProcessing: false,
+    results: []
+};
+
 function getProviderConfig(provider) {
     return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
 }
@@ -344,6 +415,33 @@ const elements = {
     apiKey: document.getElementById('apiKey'),
     saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
     providerInstructions: document.getElementById('providerInstructions'),
+    batchPhotoInput: document.getElementById('batchPhotoInput'),
+    selectPhotosBtn: document.getElementById('selectPhotosBtn'),
+    photoCountDisplay: document.getElementById('photoCountDisplay'),
+    batchOcr: document.getElementById('batchOcr'),
+    batchLlm: document.getElementById('batchLlm'),
+    batchVariants: document.getElementById('batchVariants'),
+    startBatchBtn: document.getElementById('startBatchBtn'),
+    batchProgress: document.getElementById('batchProgress'),
+    batchStatus: document.getElementById('batchStatus'),
+    progressText: document.getElementById('progressText'),
+    progressPercent: document.getElementById('progressPercent'),
+    progressFill: document.getElementById('progressFill'),
+    currentPhotoStatus: document.getElementById('currentPhotoStatus'),
+    batchTabBtns: document.querySelectorAll('.batch-tab-btn'),
+    batchTabContents: document.querySelectorAll('.batch-tab-content'),
+    searchInput: document.getElementById('searchInput'),
+    searchBtn: document.getElementById('searchBtn'),
+    searchResults: document.getElementById('searchResults'),
+    searchCount: document.getElementById('searchCount'),
+    resultsContainer: document.getElementById('resultsContainer'),
+    searchEmpty: document.getElementById('searchEmpty'),
+    clearIndexBtn: document.getElementById('clearIndexBtn'),
+    libraryCount: document.getElementById('libraryCount'),
+    indexSize: document.getElementById('indexSize'),
+    lastUpdated: document.getElementById('lastUpdated'),
+    libraryList: document.getElementById('libraryList'),
+    libraryItems: document.getElementById('libraryItems'),
     variantInstagram: document.getElementById('variantInstagram'),
     variantTiktok: document.getElementById('variantTiktok'),
     variantEmail: document.getElementById('variantEmail'),
@@ -365,6 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDatabase();
     checkLLMStatus();
     updateTesseractStatus();
+    updateLibraryDisplay();
 });
 
 function initEventListeners() {
@@ -414,8 +513,347 @@ function initEventListeners() {
         checkLLMStatus();
     });
 
+    elements.selectPhotosBtn.addEventListener('click', () => {
+        elements.batchPhotoInput.click();
+    });
+
+    elements.batchPhotoInput.addEventListener('change', (e) => {
+        const count = e.target.files.length;
+        elements.photoCountDisplay.textContent = count > 0 ? `${count} photo(s) selected` : '';
+        elements.startBatchBtn.disabled = count === 0;
+    });
+
+    elements.startBatchBtn.addEventListener('click', () => {
+        const files = elements.batchPhotoInput.files;
+        const options = {
+            ocr: elements.batchOcr.checked,
+            llm: elements.batchLlm.checked,
+            variants: elements.batchVariants.checked
+        };
+
+        processBatchPhotos(files, options);
+    });
+
+    elements.batchTabBtns.forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            switchBatchTab(e.currentTarget.dataset.tab);
+        });
+    });
+
+    elements.searchBtn.addEventListener('click', () => {
+        searchPhotos(elements.searchInput.value);
+    });
+
+    elements.searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            searchPhotos(elements.searchInput.value);
+        }
+    });
+
+    elements.clearIndexBtn.addEventListener('click', async () => {
+        if (confirm('Clear all indexed photos? This cannot be undone.')) {
+            await BatchDB.clear();
+            await updateLibraryDisplay();
+            showStatus(elements.batchStatus, '✓ Index cleared', 'success');
+        }
+    });
+
     elements.tabBtns.forEach((btn) => {
         btn.addEventListener('click', switchTab);
+    });
+}
+
+async function processBatchPhotos(files, options) {
+    if (!files || files.length === 0) {
+        showStatus(elements.batchStatus, '✗ No photos selected', 'error');
+        return;
+    }
+
+    batchState.queue = Array.from(files);
+    batchState.currentIndex = 0;
+    batchState.isProcessing = true;
+    batchState.results = [];
+
+    showBatchProgress(true);
+    elements.batchStatus.classList.add('hidden');
+
+    for (let i = 0; i < batchState.queue.length; i += 1) {
+        if (!batchState.isProcessing) break;
+
+        batchState.currentIndex = i;
+        await processOnePhoto(batchState.queue[i], options, i, batchState.queue.length);
+        updateBatchProgressUI(i + 1, batchState.queue.length);
+    }
+
+    batchState.isProcessing = false;
+    showBatchProgress(false);
+    showStatus(
+        elements.batchStatus,
+        `✓ Processed ${batchState.results.length} photo(s) successfully`,
+        'success'
+    );
+
+    await updateLibraryDisplay();
+}
+
+async function processOnePhoto(file, options, index, total) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+
+        reader.onload = async (event) => {
+            try {
+                const photoData = {
+                    id: `photo_${Date.now()}_${index}`,
+                    timestamp: new Date().toISOString(),
+                    file_name: file.name,
+                    raw_image: event.target.result,
+                    raw_text: '',
+                    llm_output: '',
+                    keywords: [],
+                    generated_variants: [],
+                    metadata: {
+                        file_size: file.size,
+                        image_size: null
+                    }
+                };
+
+                elements.currentPhotoStatus.textContent = `${index + 1}/${total}: Preparing ${file.name}...`;
+
+                await setBatchImageSize(photoData, event.target.result);
+
+                if (options.ocr) {
+                    elements.currentPhotoStatus.textContent = `${index + 1}/${total}: Running OCR on ${file.name}...`;
+
+                    try {
+                        const { data: { text } } = await Tesseract.recognize(event.target.result, 'eng');
+                        photoData.raw_text = text;
+                    } catch (error) {
+                        console.error('OCR failed:', error);
+                    }
+                }
+
+                if (options.llm && photoData.raw_text) {
+                    elements.currentPhotoStatus.textContent = `${index + 1}/${total}: Processing with LLM...`;
+
+                    const { provider, apiKey } = ApiKeyManager.getActive();
+                    if (apiKey) {
+                        try {
+                            const content = await requestLLM({
+                                provider,
+                                apiKey,
+                                systemPrompt: 'Extract key information and return JSON with topics, structure, and keywords.',
+                                userPrompt: `Analyze this extracted text and provide key topics, structure, and 3-5 keywords. Return as JSON.\n\nText:\n${photoData.raw_text}`,
+                                temperature: 0.5,
+                                maxTokens: 500,
+                                timeout: 15000
+                            });
+
+                            photoData.llm_output = content;
+
+                            try {
+                                const parsed = JSON.parse(content);
+                                photoData.keywords = parsed.keywords || extractKeywords(photoData.raw_text);
+                            } catch (error) {
+                                photoData.keywords = extractKeywords(photoData.raw_text);
+                            }
+                        } catch (error) {
+                            console.error('LLM failed:', error);
+                            photoData.keywords = extractKeywords(photoData.raw_text);
+                        }
+                    }
+                } else if (photoData.raw_text) {
+                    photoData.keywords = extractKeywords(photoData.raw_text);
+                }
+
+                if (options.variants && photoData.raw_text) {
+                    elements.currentPhotoStatus.textContent = `${index + 1}/${total}: Generating variants...`;
+                    photoData.generated_variants = await generateBatchVariantsForPhoto(photoData);
+                }
+
+                const enriched = await enrichPhotoDataWithSemanticCompression(photoData);
+                await BatchDB.savePhoto(enriched);
+                batchState.results.push(enriched);
+                resolve();
+            } catch (error) {
+                console.error('Error processing photo:', error);
+                resolve();
+            }
+        };
+
+        reader.readAsDataURL(file);
+    });
+}
+
+async function generateBatchVariantsForPhoto(photoData) {
+    const { provider, apiKey } = ApiKeyManager.getActive();
+    if (!apiKey) {
+        return [];
+    }
+
+    try {
+        const response = await requestLLM({
+            provider,
+            apiKey,
+            systemPrompt: 'Return concise JSON only.',
+            userPrompt: `Create JSON with keys instagram, email, linkedin for this content.\n\n${photoData.llm_output || photoData.raw_text}`,
+            temperature: 0.7,
+            maxTokens: 400,
+            timeout: 12000
+        });
+        const parsed = JSON.parse(response);
+        return Object.entries(parsed).map(([type, content]) => ({ type, content }));
+    } catch (error) {
+        console.error('Batch variants failed:', error);
+        return [];
+    }
+}
+
+function extractKeywords(text) {
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'is', 'are', 'was', 'were']);
+    const words = text.toLowerCase().match(/\b\w{4,}\b/g) || [];
+    const freq = {};
+
+    words.forEach((word) => {
+        if (!stopWords.has(word)) {
+            freq[word] = (freq[word] || 0) + 1;
+        }
+    });
+
+    return Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map((entry) => entry[0]);
+}
+
+function updateBatchProgressUI(current, total) {
+    const percent = Math.round((current / total) * 100);
+    elements.progressText.textContent = `Processing ${current}/${total}`;
+    elements.progressPercent.textContent = `${percent}%`;
+    elements.progressFill.style.width = `${percent}%`;
+}
+
+function showBatchProgress(show) {
+    elements.batchProgress.classList.toggle('hidden', !show);
+}
+
+async function searchPhotos(query) {
+    if (!query.trim()) {
+        elements.searchResults.classList.add('hidden');
+        elements.searchEmpty.style.display = 'block';
+        return;
+    }
+
+    const results = await BatchDB.search(query);
+    elements.resultsContainer.innerHTML = '';
+
+    if (results.length === 0) {
+        elements.searchCount.textContent = 'No results found';
+        elements.searchResults.classList.add('hidden');
+        elements.searchEmpty.style.display = 'block';
+        return;
+    }
+
+    results.forEach((result) => {
+        const card = document.createElement('div');
+        card.className = 'result-card';
+
+        const preview = (result.raw_text || '').substring(0, 150).replace(/\n/g, ' ');
+        const keywords = (result.photo_keywords || result.keywords || []).join(', ') || 'N/A';
+
+        card.innerHTML = `
+            <h4>${result.file_name}</h4>
+            <p><strong>Keywords:</strong> ${keywords}</p>
+            <p><strong>Date:</strong> ${new Date(result.timestamp).toLocaleDateString()}</p>
+            <div class="result-preview">${preview}...</div>
+        `;
+
+        card.addEventListener('click', () => showPhotoDetail(result));
+        elements.resultsContainer.appendChild(card);
+    });
+
+    elements.searchCount.textContent = `Found ${results.length} result(s)`;
+    elements.searchResults.classList.remove('hidden');
+    elements.searchEmpty.style.display = 'none';
+}
+
+function showPhotoDetail(photo) {
+    alert(`Photo: ${photo.file_name}\n\nKeywords: ${(photo.photo_keywords || photo.keywords || []).join(', ')}\n\nPreview:\n${(photo.raw_text || '').substring(0, 200)}...`);
+}
+
+async function viewPhotoDetail(id) {
+    const photo = await BatchDB.getById(id);
+    if (photo) {
+        showPhotoDetail(photo);
+    }
+}
+
+function switchBatchTab(tabName) {
+    elements.batchTabContents.forEach((tab) => {
+        tab.classList.remove('active');
+    });
+
+    elements.batchTabBtns.forEach((btn) => {
+        btn.classList.remove('active');
+    });
+
+    document.getElementById(`${tabName}Tab`).classList.add('active');
+    document.querySelector(`.batch-tab-btn[data-tab="${tabName}"]`).classList.add('active');
+}
+
+async function updateLibraryDisplay() {
+    try {
+        const all = await BatchDB.getAll();
+        elements.libraryCount.textContent = String(all.length);
+
+        const sizeKB = all.reduce((sum, photo) => {
+            const textSize = (photo.raw_text || '').length + (photo.llm_output || '').length + (photo.metadata_string || '').length;
+            return sum + (textSize / 1024);
+        }, 0);
+        elements.indexSize.textContent = String(Math.round(sizeKB));
+
+        if (all.length > 0) {
+            elements.lastUpdated.textContent = new Date(all[all.length - 1].timestamp).toLocaleString();
+            elements.libraryItems.innerHTML = '';
+
+            all.slice(-5).reverse().forEach((photo) => {
+                const item = document.createElement('div');
+                item.className = 'library-item';
+
+                const label = document.createElement('span');
+                label.textContent = `${photo.file_name} (${new Date(photo.timestamp).toLocaleDateString()})`;
+
+                const button = document.createElement('button');
+                button.className = 'btn btn-secondary';
+                button.textContent = 'View';
+                button.addEventListener('click', () => {
+                    viewPhotoDetail(photo.id);
+                });
+
+                item.appendChild(label);
+                item.appendChild(button);
+                elements.libraryItems.appendChild(item);
+            });
+
+            elements.libraryList.classList.remove('hidden');
+        } else {
+            elements.lastUpdated.textContent = 'Never';
+            elements.libraryItems.innerHTML = '';
+            elements.libraryList.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error('Library display failed:', error);
+    }
+}
+
+function setBatchImageSize(photoData, dataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            photoData.metadata.image_size = { width: img.width, height: img.height };
+            resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = dataUrl;
     });
 }
 

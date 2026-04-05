@@ -7,6 +7,7 @@
     <meta name="description" content="Phone Studio - AI content studio">
     <title>Phone Studio</title>
     <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%23000' width='180' height='180'/><text x='50%' y='50%' font-size='80' fill='%23fff' text-anchor='middle' dominant-baseline='middle'>PS</text></svg>">
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -204,6 +205,92 @@
                     <button id="resetBtn" class="btn btn-outline">
                         🔄 Start Over
                     </button>
+                </div>
+            </section>
+
+            <!-- BATCH PROCESSOR SECTION -->
+            <section class="panel batch-processor-panel">
+                <h2>📦 Batch Photo Processor</h2>
+                <p class="help-text">Process multiple screenshots at once. Choose 10-50 photos and we'll index them all.</p>
+
+                <div class="batch-tabs">
+                    <button class="batch-tab-btn active" data-tab="upload">Upload & Process</button>
+                    <button class="batch-tab-btn" data-tab="search">Search Index</button>
+                    <button class="batch-tab-btn" data-tab="library">Photo Library</button>
+                </div>
+
+                <div class="batch-tab-content active" id="uploadTab">
+                    <div class="upload-area">
+                        <input type="file" id="batchPhotoInput" accept="image/*" multiple class="hidden-input">
+                        <button id="selectPhotosBtn" class="btn btn-primary">
+                            📸 Select Photos to Process
+                        </button>
+                        <p class="help-text" id="photoCountDisplay"></p>
+                    </div>
+
+                    <div class="process-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="batchOcr" checked> Run OCR
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="batchLlm" checked> Send to LLM
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="batchVariants"> Generate Variants
+                        </label>
+                    </div>
+
+                    <button id="startBatchBtn" class="btn btn-accent" disabled>
+                        ⚡ Start Batch Processing
+                    </button>
+
+                    <div id="batchProgress" class="batch-progress hidden">
+                        <div class="progress-header">
+                            <span id="progressText">Processing 0/0</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div class="progress-current">
+                            <p id="currentPhotoStatus">Waiting to start...</p>
+                        </div>
+                    </div>
+
+                    <div id="batchStatus" class="status-message hidden"></div>
+                </div>
+
+                <div class="batch-tab-content" id="searchTab">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" class="select" placeholder="Search processed photos (e.g., 'credit', 'contract', 'email')...">
+                        <button id="searchBtn" class="btn btn-secondary">🔍 Search</button>
+                    </div>
+
+                    <div id="searchResults" class="search-results hidden">
+                        <p id="searchCount" class="help-text"></p>
+                        <div id="resultsContainer" class="results-container"></div>
+                    </div>
+
+                    <p id="searchEmpty" class="help-text" style="margin-top: 16px;">
+                        No searches yet. Process photos first, then search by keywords.
+                    </p>
+                </div>
+
+                <div class="batch-tab-content" id="libraryTab">
+                    <div class="library-stats">
+                        <p><strong>Total Processed:</strong> <span id="libraryCount">0</span> photos</p>
+                        <p><strong>Index Size:</strong> <span id="indexSize">0</span> KB</p>
+                        <p><strong>Last Updated:</strong> <span id="lastUpdated">Never</span></p>
+                    </div>
+
+                    <button id="clearIndexBtn" class="btn btn-outline" style="margin-top: 12px;">
+                        🗑️ Clear All Indexed Photos
+                    </button>
+
+                    <div id="libraryList" class="library-list hidden">
+                        <p class="help-text">Recently processed:</p>
+                        <div id="libraryItems"></div>
+                    </div>
                 </div>
             </section>
 
