@@ -71,6 +71,44 @@ Groq offers 60 free requests per minute:
 
 Use Groq for daily testing to keep costs down.
 
+## V2.5 - Semantic Compression & Photo Metadata
+
+Phone Studio now generates semantically compressed metadata for each screenshot.
+
+### What Is Semantic Compression?
+
+Instead of storing only full OCR text, Phone Studio now also extracts:
+- Content type such as contract, email, program, or report
+- Key concepts such as finance, business, legal, or marketing
+- Named entities such as companies or people
+- Keywords for search and recall
+- A short summary
+
+Target size: roughly **300-500 bytes** for the metadata string, versus several KB for full OCR and analysis.
+
+### How To Use
+
+1. Process a screenshot in Phone Studio.
+2. Copy the metadata string from the `Add to Photo Description` panel.
+3. Open the Photos app on iPhone.
+4. Open the photo info/description field.
+5. Paste the metadata and save.
+
+Your photo now carries:
+- The visual screenshot
+- A semantic index in the description
+- Searchable keywords
+- Structured metadata for later LLM workflows
+
+### Why This Matters
+
+Each photo becomes a self-contained knowledge unit:
+- Backs up to iCloud with context attached
+- Is more searchable by semantic meaning
+- Can be queried later without re-reading the full OCR every time
+- Is easier to share with useful context intact
+- Sets up future automation and batch indexing
+
 ## GitHub Pages Deployment
 
 1. Create a public GitHub repository named `phone-studio`.

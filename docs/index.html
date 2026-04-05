@@ -98,6 +98,55 @@
                 <textarea id="rawOutput" class="textarea output-textarea hidden" readonly></textarea>
             </section>
 
+            <!-- Photo Metadata Panel -->
+            <section class="panel photo-metadata-panel" id="photoMetadataPanel" style="display: none;">
+                <h2>📸 Add to Photo Description</h2>
+                <p class="help-text">Copy this and paste into the photo's description in the Photos app.</p>
+                <textarea class="textarea textarea-small" id="metadataForCopy" readonly></textarea>
+                <button class="btn btn-secondary" id="copyMetadataBtn">
+                    📋 Copy Metadata String
+                </button>
+                <p class="help-text">This makes your photo searchable and LLM-ready.</p>
+            </section>
+
+            <!-- Semantic Metadata Panel -->
+            <section class="panel semantic-panel" id="semanticPanel" style="display: none;">
+                <h2>🧠 Semantic Compression</h2>
+                <p class="help-text">This photo's compressed semantic index for LLM queries.</p>
+
+                <div class="semantic-display">
+                    <div class="semantic-item">
+                        <strong>Content Type:</strong>
+                        <span id="semanticType">—</span>
+                    </div>
+                    <div class="semantic-item">
+                        <strong>Key Concepts:</strong>
+                        <span id="semanticConcepts">—</span>
+                    </div>
+                    <div class="semantic-item">
+                        <strong>Keywords:</strong>
+                        <span id="semanticKeywords">—</span>
+                    </div>
+                    <div class="semantic-item">
+                        <strong>Entities:</strong>
+                        <span id="semanticEntities">—</span>
+                    </div>
+                    <div class="semantic-item">
+                        <strong>Summary:</strong>
+                        <span id="semanticSummary">—</span>
+                    </div>
+                    <div class="semantic-item">
+                        <strong>Metadata Size:</strong>
+                        <span id="semanticSize">—</span> bytes
+                    </div>
+                </div>
+
+                <textarea class="textarea textarea-small" id="semanticJson" readonly></textarea>
+                <button class="btn btn-secondary" id="copySemanticBtn">
+                    📋 Copy Semantic Data
+                </button>
+            </section>
+
             <!-- Variants Generation -->
             <section class="panel variants-panel">
                 <h2>Generate Content Variants</h2>

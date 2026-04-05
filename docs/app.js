@@ -85,6 +85,189 @@ function getProviderConfig(provider) {
     return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
 }
 
+const SemanticCompressor = {
+    async compress(ocrText, llmOutput) {
+        try {
+            const concepts = this.extractConcepts(ocrText, llmOutput);
+            const entities = this.extractEntities(ocrText);
+            const contentType = this.classifyContentType(ocrText, llmOutput);
+            const summary = this.generateSummary(ocrText, llmOutput);
+            const keywords = this.extractKeywords(ocrText, concepts);
+
+            return {
+                v: 1,
+                type: contentType,
+                concepts,
+                entities,
+                keywords,
+                summary,
+                confidence: 0.85,
+                timestamp: new Date().toISOString().split('T')[0]
+            };
+        } catch (error) {
+            console.error('Compression error:', error);
+            return null;
+        }
+    },
+
+    extractConcepts(ocrText, llmOutput) {
+        const combined = `${ocrText} ${llmOutput}`.toLowerCase();
+        const conceptPatterns = {
+            finance: ['credit', 'funding', 'loan', 'finance', 'financial', 'capital', 'investment', 'payment', 'cost'],
+            business: ['business', 'company', 'corporate', 'enterprise', 'organization', 'client', 'service'],
+            legal: ['contract', 'agreement', 'legal', 'terms', 'compliance', 'regulatory', 'law'],
+            technology: ['software', 'app', 'digital', 'online', 'platform', 'system', 'tech', 'data'],
+            marketing: ['marketing', 'branding', 'advertising', 'campaign', 'social', 'content', 'engagement'],
+            operations: ['process', 'workflow', 'procedure', 'operations', 'management', 'implementation'],
+            communication: ['email', 'contact', 'communication', 'message', 'phone', 'address']
+        };
+
+        const foundConcepts = [];
+        for (const [concept, keywords] of Object.entries(conceptPatterns)) {
+            const matches = keywords.filter((keyword) => combined.includes(keyword));
+            if (matches.length >= 2) {
+                foundConcepts.push(concept);
+            }
+        }
+
+        return foundConcepts.length > 0 ? foundConcepts : ['general'];
+    },
+
+    extractEntities(ocrText) {
+        const words = ocrText.match(/\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b/g) || [];
+        const unique = [...new Set(words)];
+        return unique.slice(0, 5);
+    },
+
+    classifyContentType(ocrText, llmOutput) {
+        const combined = `${ocrText} ${llmOutput}`.toLowerCase();
+
+        if (combined.includes('contract') || combined.includes('agreement')) return 'contract';
+        if (combined.includes('invoice') || combined.includes('receipt')) return 'invoice';
+        if (combined.includes('email') || combined.includes('@')) return 'email';
+        if (combined.includes('program') || combined.includes('overview')) return 'program';
+        if (combined.includes('proposal') || combined.includes('pitch')) return 'proposal';
+        if (combined.includes('analysis') || combined.includes('report')) return 'report';
+        if (combined.includes('form') || combined.includes('application')) return 'form';
+
+        return 'document';
+    },
+
+    generateSummary(ocrText, llmOutput) {
+        if (llmOutput && llmOutput.length > 0) {
+            const firstSentence = llmOutput.split(/[\.\?!]+/)[0].trim();
+            if (firstSentence.length > 10 && firstSentence.length < 120) {
+                return firstSentence.substring(0, 100);
+            }
+        }
+
+        const sentences = ocrText.split(/[\.\?!]+/);
+        const meaningful = sentences.find((sentence) => sentence.trim().length > 20);
+        if (meaningful) {
+            return meaningful.trim().substring(0, 100);
+        }
+
+        return 'Content analysis available';
+    },
+
+    extractKeywords(ocrText, concepts) {
+        const stopWords = new Set([
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+            'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+            'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might'
+        ]);
+
+        const words = ocrText.toLowerCase().match(/\b\w{4,}\b/g) || [];
+        const freq = {};
+
+        words.forEach((word) => {
+            if (!stopWords.has(word)) {
+                freq[word] = (freq[word] || 0) + 1;
+            }
+        });
+
+        const topWords = Object.entries(freq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map((entry) => entry[0]);
+
+        return [...new Set([...concepts, ...topWords])].slice(0, 8);
+    },
+
+    formatForMetadata(compressed) {
+        if (!compressed) return '';
+
+        const parts = [
+            `v${compressed.v}`,
+            `type:${compressed.type}`,
+            `concepts:${compressed.concepts.join(',')}`,
+            `keywords:${compressed.keywords.join(',')}`,
+            `summary:${compressed.summary.replace(/[|]/g, ' ')}`,
+            `date:${compressed.timestamp}`
+        ];
+
+        return parts.join('|');
+    },
+
+    parseFromMetadata(metadataString) {
+        if (!metadataString || !metadataString.startsWith('v')) return null;
+
+        const parts = metadataString.split('|');
+        const result = { v: 1 };
+
+        parts.forEach((part) => {
+            if (part.startsWith('v')) result.v = parseInt(part.substring(1), 10);
+            else if (part.startsWith('type:')) result.type = part.substring(5);
+            else if (part.startsWith('concepts:')) result.concepts = part.substring(9).split(',');
+            else if (part.startsWith('keywords:')) result.keywords = part.substring(9).split(',');
+            else if (part.startsWith('summary:')) result.summary = part.substring(8);
+            else if (part.startsWith('date:')) result.timestamp = part.substring(5);
+        });
+
+        return result;
+    }
+};
+
+const PhotoMetadataWriter = {
+    generateMetadataPayload(photoData, compressed) {
+        return {
+            type: 'phone_studio_index',
+            version: 1,
+            data: {
+                title: `${compressed.type.toUpperCase()}: ${compressed.summary}`.substring(0, 120),
+                description: SemanticCompressor.formatForMetadata(compressed),
+                keywords: compressed.keywords,
+                concepts: compressed.concepts,
+                entities: compressed.entities || [],
+                searchable_text: `${compressed.summary} ${compressed.concepts.join(' ')}`.trim()
+            },
+            generated: new Date().toISOString(),
+            photo_id: photoData.id
+        };
+    },
+
+    formatForCopyPaste(payload) {
+        const { data } = payload;
+
+        return `Phone Studio Index
+Title: ${data.title}
+Type: ${payload.type}
+Concepts: ${data.concepts.join(', ')}
+Keywords: ${data.keywords.join(', ')}
+Summary: ${data.searchable_text.substring(0, 200)}
+Metadata: ${data.description}
+
+[To add to photo: Copy above, go to Photos app, Edit > Info > Description > Paste]`;
+    },
+
+    generateShortcutLink(payload) {
+        return {
+            instruction: 'Open Shortcuts app -> Create automation -> Run when photo is saved',
+            data: payload
+        };
+    }
+};
+
 let db = null;
 let mediaRecorder = null;
 let mediaStream = null;
@@ -99,6 +282,8 @@ let state = {
     voiceDurationSeconds: null,
     variants: [],
     leads: [],
+    compressedIndex: null,
+    photoMetadata: null,
     currentRecord: null,
     metadata: {
         timestamp: null,
@@ -127,6 +312,18 @@ const elements = {
     jsonOutput: document.getElementById('jsonOutput'),
     markdownOutput: document.getElementById('markdownOutput'),
     rawOutput: document.getElementById('rawOutput'),
+    photoMetadataPanel: document.getElementById('photoMetadataPanel'),
+    metadataForCopy: document.getElementById('metadataForCopy'),
+    copyMetadataBtn: document.getElementById('copyMetadataBtn'),
+    semanticPanel: document.getElementById('semanticPanel'),
+    semanticType: document.getElementById('semanticType'),
+    semanticConcepts: document.getElementById('semanticConcepts'),
+    semanticKeywords: document.getElementById('semanticKeywords'),
+    semanticEntities: document.getElementById('semanticEntities'),
+    semanticSummary: document.getElementById('semanticSummary'),
+    semanticSize: document.getElementById('semanticSize'),
+    semanticJson: document.getElementById('semanticJson'),
+    copySemanticBtn: document.getElementById('copySemanticBtn'),
     generateVariantsBtn: document.getElementById('generateVariantsBtn'),
     variantsOutput: document.getElementById('variantsOutput'),
     variantsContainer: document.getElementById('variantsContainer'),
@@ -180,6 +377,8 @@ function initEventListeners() {
     elements.llmBtn.addEventListener('click', sendToLLM);
     elements.generateVariantsBtn.addEventListener('click', generateVariants);
     elements.extractLeadsBtn.addEventListener('click', extractLeads);
+    elements.copyMetadataBtn.addEventListener('click', copyPhotoMetadata);
+    elements.copySemanticBtn.addEventListener('click', copySemantic);
     elements.downloadBtn.addEventListener('click', downloadJSON);
     elements.copyBtn.addEventListener('click', copyJSON);
     elements.resetBtn.addEventListener('click', resetApp);
@@ -740,8 +939,20 @@ async function buildOutput() {
     const providerConfig = getProviderConfig(provider);
     const emails = state.leads.filter((lead) => lead.type === 'email').map((lead) => lead.value);
     const phones = state.leads.filter((lead) => lead.type === 'phone').map((lead) => lead.value);
+    const compressed = await SemanticCompressor.compress(state.rawText, state.llmOutput);
+    const recordId = state.currentRecord?.id || `screenshot_${Date.now()}`;
+    const metadataPayload = compressed
+        ? PhotoMetadataWriter.generateMetadataPayload(
+            {
+                id: recordId,
+                timestamp: state.metadata.timestamp,
+                file_name: 'screenshot'
+            },
+            compressed
+        )
+        : null;
     const output = {
-        id: state.currentRecord?.id || `screenshot_${Date.now()}`,
+        id: recordId,
         timestamp: state.metadata.timestamp,
         source_type: 'screenshot_ocr',
         raw_text: state.rawText,
@@ -763,18 +974,83 @@ async function buildOutput() {
             lead_count: state.leads.length
         },
         generated_variants: state.variants,
+        compressed_index: compressed,
+        photo_metadata: metadataPayload,
         approval_state: 'pending_review',
         llm_ready: Boolean(state.rawText || state.llmOutput),
         linked_voice_id: null,
         linked_post_ids: [],
     };
 
+    state.compressedIndex = compressed;
+    state.photoMetadata = metadataPayload;
     state.currentRecord = output;
     elements.jsonOutput.value = JSON.stringify(output, null, 2);
     elements.rawOutput.value = state.rawText;
     elements.markdownOutput.value = state.llmOutput;
 
+    showPhotoMetadataPanel(metadataPayload);
+    displaySemanticCompression(compressed);
+
     await persistRecord(output);
+}
+
+async function enrichPhotoDataWithSemanticCompression(photoData) {
+    const compressed = await SemanticCompressor.compress(
+        photoData.raw_text || '',
+        photoData.llm_output || ''
+    );
+
+    if (!compressed) {
+        return photoData;
+    }
+
+    return {
+        ...photoData,
+        compressed_index: compressed,
+        metadata_string: SemanticCompressor.formatForMetadata(compressed),
+        photo_title: `${compressed.type}: ${compressed.summary}`.substring(0, 120),
+        photo_keywords: compressed.keywords,
+    };
+}
+
+function showPhotoMetadataPanel(payload) {
+    if (!payload) {
+        elements.photoMetadataPanel.style.display = 'none';
+        elements.metadataForCopy.value = '';
+        return;
+    }
+
+    elements.photoMetadataPanel.style.display = 'block';
+    elements.metadataForCopy.value = PhotoMetadataWriter.formatForCopyPaste(payload);
+}
+
+function displaySemanticCompression(compressed) {
+    if (!compressed) {
+        elements.semanticPanel.style.display = 'none';
+        elements.semanticJson.value = '';
+        return;
+    }
+
+    elements.semanticPanel.style.display = 'block';
+    elements.semanticType.textContent = compressed.type;
+    elements.semanticConcepts.textContent = compressed.concepts.join(', ');
+    elements.semanticKeywords.textContent = compressed.keywords.join(', ');
+    elements.semanticEntities.textContent = (compressed.entities || []).join(', ') || 'None extracted';
+    elements.semanticSummary.textContent = compressed.summary;
+
+    const metadataString = SemanticCompressor.formatForMetadata(compressed);
+    const metadataSize = new TextEncoder().encode(metadataString).length;
+    elements.semanticSize.textContent = String(metadataSize);
+    elements.semanticJson.value = JSON.stringify(compressed, null, 2);
+}
+
+async function copyPhotoMetadata() {
+    await copyText(elements.metadataForCopy.value, '✓ Metadata copied! Paste into photo description');
+}
+
+async function copySemantic() {
+    await copyText(elements.semanticJson.value, '✓ Semantic data copied');
 }
 
 function downloadJSON() {
@@ -825,6 +1101,8 @@ function resetApp() {
         voiceDurationSeconds: null,
         variants: [],
         leads: [],
+        compressedIndex: null,
+        photoMetadata: null,
         currentRecord: null,
         metadata: {
             timestamp: null,
@@ -845,6 +1123,10 @@ function resetApp() {
     elements.jsonOutput.value = '';
     elements.markdownOutput.value = '';
     elements.rawOutput.value = '';
+    elements.metadataForCopy.value = '';
+    elements.semanticJson.value = '';
+    elements.photoMetadataPanel.style.display = 'none';
+    elements.semanticPanel.style.display = 'none';
     elements.variantsContainer.innerHTML = '';
     elements.variantsOutput.classList.add('hidden');
     elements.leadsContainer.innerHTML = '';
