@@ -35,21 +35,52 @@ For LLM testing:
 - The active provider endpoint and key status appear in the debug panel.
 - Localhost-based on-device inference remains a future path for the app.
 
-## LLM Provider Setup
+## V4 - Comprehensive LLM Provider Support & Settings
 
-Phone Studio supports multiple LLM providers:
+### Supported Providers
 
-- **Groq 70B** (Free, recommended): Get key at https://console.groq.com/keys
-- **Groq 8B Fast** (Free): Same Groq key, faster testing model
-- **Mistral** (Free): Get key at https://console.mistral.ai/api-keys
-- **DeepSeek**: Get key at https://platform.deepseek.com/api_keys
-- **OpenAI**: Get key at https://platform.openai.com/api-keys
-- **Claude (Anthropic)**: Get key at https://console.anthropic.com
-- **xAI (Grok)**: Get key at https://console.x.ai
+**Text Generation:**
+- Groq (Free, Very Fast)
+- Groq 8B Fast (Free)
+- DeepSeek (Cheap, Very Fast)
+- Mistral AI (Free tier)
+- Cerebras (Very Fast)
+- Fireworks AI (Very Fast)
+- Together AI (Very Fast)
+- OpenAI (High quality)
+- Claude / Claude 3.5 Sonnet (High quality)
+- Cohere (Research-focused)
+- xAI / Grok (Creative)
 
-In the PWA, go to Settings panel -> Select provider -> Paste API key -> Save.
+**Multimodal (Text + Vision/Search):**
+- Google Gemini (Free tier, vision)
+- Perplexity (Search + context)
+- EXA (Advanced search)
 
-Your API keys are stored locally on your device and never sent to our servers.
+**Creative / Multimodal Directory:**
+- Runway
+- Replicate
+- Hugging Face
+
+### Settings & API Keys
+
+Add an API key:
+1. Go to `Settings & API Keys`
+2. Select a provider from the directory
+3. Tap `Get API Key` for the signup link
+4. Paste the key and save it locally
+5. Use the saved-key list to switch providers later
+
+Provider comparison:
+- Compare cost, speed, free-tier status, and category
+- Keep multiple API keys saved on-device
+- Switch active providers without retyping keys
+
+BYOK model:
+- API keys stay in browser storage on your iPhone
+- Keys are never sent to Phone Studio servers
+- You control which provider is active for content generation
+- Existing legacy keys are migrated forward automatically
 
 ## V1.5 Features
 

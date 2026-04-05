@@ -475,37 +475,128 @@
             </section>
 
             <!-- Settings Panel -->
-            <section class="panel settings-panel">
-                <h2>⚙️ Settings</h2>
+            <section class="panel settings-panel" id="settingsPanel">
+                <h2>⚙️ Settings & API Keys</h2>
 
-                <div class="settings-group">
-                    <label for="llmProvider" class="label">LLM Provider</label>
-                    <select id="llmProvider" class="select">
-                        <option value="groq">Groq 70B (Free, Powerful)</option>
-                        <option value="groq_fast">Groq 8B (Free, Fast)</option>
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="mistral">Mistral AI (Free)</option>
-                        <option value="anthropic">Claude (Anthropic)</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="xai">xAI (Grok)</option>
-                    </select>
+                <div class="settings-section">
+                    <h3>Active LLM</h3>
+                    <div class="active-provider-info">
+                        <p><strong>Current Provider:</strong> <span id="currentProviderName">None</span></p>
+                        <p id="currentProviderCost"></p>
+                        <p id="currentProviderSpeed"></p>
+                    </div>
                 </div>
 
-                <div class="settings-group">
-                    <label for="apiKey" class="label">API Key</label>
-                    <input type="password" id="apiKey" class="select" placeholder="Paste your API key here (stored locally, never sent to our servers)">
-                    <p class="help-text" id="providerInstructions"></p>
-                    <button id="saveApiKeyBtn" class="btn btn-secondary" style="margin-top: 8px;">💾 Save API Key</button>
+                <div class="settings-section">
+                    <h3>Add API Key</h3>
+
+                    <div class="provider-selector">
+                        <label for="providerSelect">Select Provider:</label>
+                        <select id="providerSelect" class="select">
+                            <option value="">-- Choose a provider --</option>
+                            <optgroup label="Text Generation">
+                                <option value="groq">Groq (Free, Very Fast)</option>
+                                <option value="groq_fast">Groq 8B Fast (Free)</option>
+                                <option value="deepseek">DeepSeek (Cheap)</option>
+                                <option value="mistral">Mistral AI (Free tier)</option>
+                                <option value="cerebras">Cerebras (Very Fast)</option>
+                                <option value="fireworks">Fireworks AI (Very Fast)</option>
+                                <option value="together">Together AI (Very Fast)</option>
+                                <option value="anthropic">Claude (Anthropic)</option>
+                                <option value="anthropic_sonnet">Claude 3.5 Sonnet (Premium)</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="xai">xAI (Grok)</option>
+                            </optgroup>
+                            <optgroup label="Text + Vision/Search">
+                                <option value="google_gemini">Google Gemini (Free tier)</option>
+                                <option value="perplexity">Perplexity (Search)</option>
+                                <option value="exa">EXA (Search)</option>
+                            </optgroup>
+                            <optgroup label="Multimodal & Video">
+                                <option value="runway">Runway (Video Generation)</option>
+                                <option value="replicate">Replicate</option>
+                                <option value="huggingface">Hugging Face</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div id="providerInfoCard" class="provider-info-card hidden">
+                        <div class="info-row">
+                            <span class="label">Category:</span>
+                            <span id="providerCategory">—</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Cost:</span>
+                            <span id="providerCost">—</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">Speed:</span>
+                            <span id="providerSpeed">—</span>
+                        </div>
+                        <div class="info-row info-row-stacked">
+                            <span class="label">Instructions:</span>
+                            <p id="providerInstructions">—</p>
+                        </div>
+                        <button id="getApiKeyBtn" class="btn btn-secondary">
+                            🔗 Get API Key
+                        </button>
+                    </div>
+
+                    <div class="api-input-section">
+                        <label for="apiKeyInput">API Key:</label>
+                        <input type="password" id="apiKeyInput" class="select" placeholder="Paste your API key here">
+                        <button id="saveApiKeyBtn" class="btn btn-primary" disabled>
+                            💾 Save API Key
+                        </button>
+                    </div>
                 </div>
 
-                <div class="settings-group">
-                    <label class="label">About This Setting</label>
+                <div class="settings-section">
+                    <h3>Saved API Keys</h3>
+                    <div id="savedKeysList" class="saved-keys-list"></div>
+                </div>
+
+                <div class="settings-section settings-info">
                     <p class="help-text">
-                        Your API keys are stored locally on your iPhone using browser storage (localStorage).
-                        They are never sent to our servers or any third party. You control where they go.
+                        ✅ Your API keys are stored locally on your iPhone using browser storage (localStorage)
+                    </p>
+                    <p class="help-text">
+                        ✅ Keys are NEVER sent to our servers or any third party
+                    </p>
+                    <p class="help-text">
+                        ✅ You control where they go - use for any LLM provider
                     </p>
                 </div>
+
+                <div class="settings-section">
+                    <h3>Provider Comparison</h3>
+                    <button id="showComparisonBtn" class="btn btn-secondary">
+                        📊 Compare Providers
+                    </button>
+                </div>
             </section>
+
+            <div id="providerComparisonModal" class="modal hidden">
+                <div class="modal-content">
+                    <button id="closeComparisonBtn" class="modal-close" type="button">✕</button>
+                    <h3>Provider Comparison</h3>
+                    <div class="comparison-table-container">
+                        <table class="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>Provider</th>
+                                    <th>Category</th>
+                                    <th>Speed</th>
+                                    <th>Cost/1M</th>
+                                    <th>Free Tier</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comparisonTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
             <!-- Debug Panel -->
             <section class="panel debug-panel">

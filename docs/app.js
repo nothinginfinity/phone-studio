@@ -4,52 +4,219 @@
 const LLM_PROVIDERS = {
     groq: {
         name: 'Groq',
+        category: 'Text Generation',
         apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
         model: 'llama-3.1-70b-versatile',
         free: true,
-        instructions: 'Get free API key at: https://console.groq.com/keys (60 requests/min free tier)'
+        costPer1M: 0,
+        speed: 'Very Fast',
+        instructions: 'Get free API key at: https://console.groq.com/keys (60 requests/min)',
+        signupUrl: 'https://console.groq.com/keys',
+        supportsChat: true
     },
     groq_fast: {
-        name: 'Groq (Fast)',
+        name: 'Groq 8B Fast',
+        category: 'Text Generation',
         apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
         model: 'llama-3.1-8b-instant',
         free: true,
-        instructions: 'Same Groq API key. This is the fast/light model. Get key at: https://console.groq.com/keys'
-    },
-    deepseek: {
-        name: 'DeepSeek',
-        apiUrl: 'https://api.deepseek.com/chat/completions',
-        model: 'deepseek-chat',
-        free: false,
-        instructions: 'Get API key at: https://platform.deepseek.com/api_keys'
-    },
-    mistral: {
-        name: 'Mistral AI',
-        apiUrl: 'https://api.mistral.ai/v1/chat/completions',
-        model: 'mistral-7b-instruct',
-        free: true,
-        instructions: 'Get free API key at: https://console.mistral.ai/api-keys'
-    },
-    anthropic: {
-        name: 'Claude (Anthropic)',
-        apiUrl: 'https://api.anthropic.com/v1/messages',
-        model: 'claude-3-haiku-20240307',
-        free: false,
-        instructions: 'Get API key at: https://console.anthropic.com'
+        costPer1M: 0,
+        speed: 'Very Fast',
+        instructions: 'Same Groq API key. Use this for fast drafts and lower-latency tests.',
+        signupUrl: 'https://console.groq.com/keys',
+        supportsChat: true
     },
     openai: {
         name: 'OpenAI',
+        category: 'Text + Vision',
         apiUrl: 'https://api.openai.com/v1/chat/completions',
         model: 'gpt-4o-mini',
         free: false,
-        instructions: 'Get API key at: https://platform.openai.com/api-keys'
+        costPer1M: 150,
+        speed: 'Fast',
+        instructions: 'Get API key at: https://platform.openai.com/api-keys',
+        signupUrl: 'https://platform.openai.com/signup',
+        supportsChat: true
+    },
+    anthropic: {
+        name: 'Claude (Anthropic)',
+        category: 'Text Generation',
+        apiUrl: 'https://api.anthropic.com/v1/messages',
+        model: 'claude-3-5-sonnet-20241022',
+        free: false,
+        costPer1M: 300,
+        speed: 'Medium',
+        instructions: 'Get API key at: https://console.anthropic.com/api-keys',
+        signupUrl: 'https://console.anthropic.com',
+        supportsChat: true
+    },
+    anthropic_sonnet: {
+        name: 'Claude 3.5 Sonnet',
+        category: 'Text Generation (Premium)',
+        apiUrl: 'https://api.anthropic.com/v1/messages',
+        model: 'claude-3-5-sonnet-20241022',
+        free: false,
+        costPer1M: 300,
+        speed: 'Medium',
+        instructions: 'Same as Claude. Use for high-quality long-form content.',
+        signupUrl: 'https://console.anthropic.com',
+        supportsChat: true
+    },
+    deepseek: {
+        name: 'DeepSeek',
+        category: 'Text Generation',
+        apiUrl: 'https://api.deepseek.com/chat/completions',
+        model: 'deepseek-chat',
+        free: false,
+        costPer1M: 27,
+        speed: 'Very Fast',
+        instructions: 'Get API key at: https://platform.deepseek.com/api-keys',
+        signupUrl: 'https://platform.deepseek.com',
+        supportsChat: true
+    },
+    mistral: {
+        name: 'Mistral AI',
+        category: 'Text Generation',
+        apiUrl: 'https://api.mistral.ai/v1/chat/completions',
+        model: 'mistral-medium',
+        free: true,
+        costPer1M: 81,
+        speed: 'Fast',
+        instructions: 'Get free API key at: https://console.mistral.ai/api-keys',
+        signupUrl: 'https://console.mistral.ai/api-keys',
+        supportsChat: true
     },
     xai: {
         name: 'xAI (Grok)',
+        category: 'Text Generation',
         apiUrl: 'https://api.x.ai/v1/chat/completions',
-        model: 'grok-2-1212',
+        model: 'grok-beta',
         free: false,
-        instructions: 'Get API key at: https://console.x.ai'
+        costPer1M: 500,
+        speed: 'Medium',
+        instructions: 'Get API key at: https://console.x.ai/api-keys',
+        signupUrl: 'https://console.x.ai',
+        supportsChat: true
+    },
+    cerebras: {
+        name: 'Cerebras',
+        category: 'Text Generation',
+        apiUrl: 'https://api.cerebras.ai/v1/chat/completions',
+        model: 'llama-3.1-70b',
+        free: false,
+        costPer1M: 120,
+        speed: 'Very Fast',
+        instructions: 'Get API key at: https://cloud.cerebras.ai/api-keys',
+        signupUrl: 'https://cloud.cerebras.ai',
+        supportsChat: true
+    },
+    fireworks: {
+        name: 'Fireworks AI',
+        category: 'Text Generation',
+        apiUrl: 'https://api.fireworks.ai/inference/v1/chat/completions',
+        model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
+        free: false,
+        costPer1M: 90,
+        speed: 'Very Fast',
+        instructions: 'Get API key at: https://console.fireworks.ai/api-keys',
+        signupUrl: 'https://console.fireworks.ai',
+        supportsChat: true
+    },
+    google_gemini: {
+        name: 'Google Gemini',
+        category: 'Text + Vision',
+        apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+        model: 'gemini-1.5-flash',
+        free: true,
+        costPer1M: 75,
+        speed: 'Fast',
+        instructions: 'Get free API key at: https://ai.google.dev/api-keys',
+        signupUrl: 'https://ai.google.dev',
+        supportsChat: true
+    },
+    cohere: {
+        name: 'Cohere',
+        category: 'Text Generation',
+        apiUrl: 'https://api.cohere.ai/v1/chat',
+        model: 'command-r-plus',
+        free: false,
+        costPer1M: 300,
+        speed: 'Medium',
+        instructions: 'Get API key at: https://dashboard.cohere.com/api-keys',
+        signupUrl: 'https://dashboard.cohere.com',
+        supportsChat: true
+    },
+    together: {
+        name: 'Together AI',
+        category: 'Text Generation',
+        apiUrl: 'https://api.together.xyz/v1/chat/completions',
+        model: 'meta-llama/Llama-3-70b-chat-hf',
+        free: false,
+        costPer1M: 90,
+        speed: 'Very Fast',
+        instructions: 'Get API key at: https://www.together.ai/api',
+        signupUrl: 'https://www.together.ai',
+        supportsChat: true
+    },
+    perplexity: {
+        name: 'Perplexity',
+        category: 'Text + Search',
+        apiUrl: 'https://api.perplexity.ai/chat/completions',
+        model: 'llama-3.1-sonar-small-128k-online',
+        free: false,
+        costPer1M: 200,
+        speed: 'Fast',
+        instructions: 'Get API key at: https://www.perplexity.ai/api',
+        signupUrl: 'https://www.perplexity.ai',
+        supportsChat: true
+    },
+    exa: {
+        name: 'EXA (Search)',
+        category: 'Search + Research',
+        apiUrl: 'https://api.exa.ai/search',
+        model: 'search',
+        free: false,
+        costPer1M: null,
+        speed: 'Fast',
+        instructions: 'Get API key at: https://dashboard.exa.ai/api-key',
+        signupUrl: 'https://exa.ai',
+        supportsChat: false
+    },
+    runway: {
+        name: 'Runway',
+        category: 'Video Generation',
+        apiUrl: 'https://api.runwayml.com/v1/tasks',
+        model: 'gen3',
+        free: false,
+        costPer1M: null,
+        speed: 'Slow (Video)',
+        instructions: 'Get API key at: https://app.runwayml.com/settings/api-keys',
+        signupUrl: 'https://runwayml.com',
+        supportsChat: false
+    },
+    replicate: {
+        name: 'Replicate',
+        category: 'Multimodal',
+        apiUrl: 'https://api.replicate.com/v1/predictions',
+        model: 'custom',
+        free: false,
+        costPer1M: null,
+        speed: 'Variable',
+        instructions: 'Get API key at: https://replicate.com/account/api-tokens',
+        signupUrl: 'https://replicate.com',
+        supportsChat: false
+    },
+    huggingface: {
+        name: 'Hugging Face',
+        category: 'Multimodal',
+        apiUrl: 'https://api-inference.huggingface.co/models',
+        model: 'custom',
+        free: false,
+        costPer1M: null,
+        speed: 'Variable',
+        instructions: 'Get API key at: https://huggingface.co/settings/tokens',
+        signupUrl: 'https://huggingface.co',
+        supportsChat: false
     }
 };
 
@@ -66,21 +233,131 @@ const BATCH_DB_NAME = 'PhoneStudioBatch';
 const BATCH_DB_VERSION = 2;
 
 const ApiKeyManager = {
-    save: (provider, apiKey) => {
-        localStorage.setItem(`llm_api_key_${provider}`, apiKey);
+    storageKey: 'phoneStudioApiKeys',
+    activeProviderKey: 'phoneStudioActiveProvider',
+    legacyPrefix: 'llm_api_key_',
+    legacyActiveProviderKey: 'llm_active_provider',
+
+    migrateLegacyStorage() {
+        const currentKeys = this.getAllSavedKeys();
+        const migratedKeys = { ...currentKeys };
+
+        Object.keys(LLM_PROVIDERS).forEach((providerId) => {
+            const legacyValue = localStorage.getItem(`${this.legacyPrefix}${providerId}`);
+            if (legacyValue && !migratedKeys[providerId]) {
+                migratedKeys[providerId] = legacyValue;
+            }
+        });
+
+        if (Object.keys(migratedKeys).length > 0) {
+            localStorage.setItem(this.storageKey, JSON.stringify(migratedKeys));
+        }
+
+        const currentActive = localStorage.getItem(this.activeProviderKey);
+        const legacyActive = localStorage.getItem(this.legacyActiveProviderKey);
+        if (!currentActive && legacyActive && LLM_PROVIDERS[legacyActive]) {
+            localStorage.setItem(this.activeProviderKey, legacyActive);
+        }
     },
-    get: (provider) => {
-        return localStorage.getItem(`llm_api_key_${provider}`) || '';
+
+    getAllProviders() {
+        return Object.keys(LLM_PROVIDERS).map((key) => ({
+            id: key,
+            ...LLM_PROVIDERS[key]
+        }));
     },
-    getActive: () => {
-        const provider = localStorage.getItem('llm_active_provider') || CONFIG.defaultProvider;
+
+    getProvider(providerId) {
+        return LLM_PROVIDERS[providerId] || null;
+    },
+
+    getProviderInfo(providerId) {
+        const provider = this.getProvider(providerId);
+        if (!provider) return null;
+
         return {
-            provider,
-            apiKey: ApiKeyManager.get(provider)
+            name: provider.name,
+            category: provider.category,
+            cost: Number.isFinite(provider.costPer1M) ? `$${provider.costPer1M}/1M tokens` : 'Variable pricing',
+            speed: provider.speed,
+            instructions: provider.instructions,
+            signupUrl: provider.signupUrl,
+            isFree: provider.free,
+            supportsChat: provider.supportsChat !== false
         };
     },
-    setActive: (provider) => {
-        localStorage.setItem('llm_active_provider', provider);
+
+    saveApiKey(providerId, apiKey) {
+        const keys = this.getAllSavedKeys();
+        keys[providerId] = apiKey;
+        localStorage.setItem(this.storageKey, JSON.stringify(keys));
+        localStorage.setItem(`${this.legacyPrefix}${providerId}`, apiKey);
+        return true;
+    },
+
+    getApiKey(providerId) {
+        const keys = this.getAllSavedKeys();
+        if (keys[providerId]) {
+            return keys[providerId];
+        }
+
+        return localStorage.getItem(`${this.legacyPrefix}${providerId}`) || '';
+    },
+
+    getAllSavedKeys() {
+        const stored = localStorage.getItem(this.storageKey);
+        if (!stored) {
+            return {};
+        }
+
+        try {
+            return JSON.parse(stored) || {};
+        } catch (error) {
+            console.warn('Failed to parse saved API keys:', error);
+            return {};
+        }
+    },
+
+    deleteApiKey(providerId) {
+        const keys = this.getAllSavedKeys();
+        delete keys[providerId];
+        localStorage.setItem(this.storageKey, JSON.stringify(keys));
+        localStorage.removeItem(`${this.legacyPrefix}${providerId}`);
+    },
+
+    getActive() {
+        const activeId = localStorage.getItem(this.activeProviderKey) || localStorage.getItem(this.legacyActiveProviderKey) || CONFIG.defaultProvider;
+        const apiKey = this.getApiKey(activeId);
+
+        if (!apiKey) {
+            const allKeys = this.getAllSavedKeys();
+            const firstAvailable = Object.keys(allKeys)[0];
+            if (firstAvailable) {
+                return {
+                    provider: firstAvailable,
+                    apiKey: allKeys[firstAvailable]
+                };
+            }
+        }
+
+        return {
+            provider: LLM_PROVIDERS[activeId] ? activeId : CONFIG.defaultProvider,
+            apiKey
+        };
+    },
+
+    setActive(providerId) {
+        const resolved = LLM_PROVIDERS[providerId] ? providerId : CONFIG.defaultProvider;
+        localStorage.setItem(this.activeProviderKey, resolved);
+        localStorage.setItem(this.legacyActiveProviderKey, resolved);
+    },
+
+    save(providerId, apiKey) {
+        return this.saveApiKey(providerId, apiKey);
+    },
+
+    get(providerId) {
+        return this.getApiKey(providerId);
     }
 };
 
@@ -462,6 +739,21 @@ function getProviderConfig(provider) {
     return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
 }
 
+function providerSupportsChat(provider) {
+    return getProviderConfig(provider).supportsChat !== false;
+}
+
+function formatProviderCost(costPer1M) {
+    return Number.isFinite(costPer1M) ? `$${costPer1M}/1M tokens` : 'Variable pricing';
+}
+
+function toggleSaveApiKeyButton() {
+    if (!elements.saveApiKeyBtn) return;
+    const hasProvider = Boolean(elements.providerSelect?.value);
+    const hasKey = Boolean(elements.apiKeyInput?.value.trim());
+    elements.saveApiKeyBtn.disabled = !(hasProvider && hasKey);
+}
+
 const SemanticCompressor = {
     async compress(ocrText, llmOutput) {
         try {
@@ -717,10 +1009,23 @@ const elements = {
     endpointDebug: document.getElementById('endpointDebug'),
     storageStatusDebug: document.getElementById('storageStatusDebug'),
     lastErrorDebug: document.getElementById('lastErrorDebug'),
-    llmProvider: document.getElementById('llmProvider'),
-    apiKey: document.getElementById('apiKey'),
+    currentProviderName: document.getElementById('currentProviderName'),
+    currentProviderCost: document.getElementById('currentProviderCost'),
+    currentProviderSpeed: document.getElementById('currentProviderSpeed'),
+    providerSelect: document.getElementById('providerSelect'),
+    providerInfoCard: document.getElementById('providerInfoCard'),
+    providerCategory: document.getElementById('providerCategory'),
+    providerCost: document.getElementById('providerCost'),
+    providerSpeed: document.getElementById('providerSpeed'),
     saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
+    getApiKeyBtn: document.getElementById('getApiKeyBtn'),
+    apiKeyInput: document.getElementById('apiKeyInput'),
     providerInstructions: document.getElementById('providerInstructions'),
+    savedKeysList: document.getElementById('savedKeysList'),
+    showComparisonBtn: document.getElementById('showComparisonBtn'),
+    providerComparisonModal: document.getElementById('providerComparisonModal'),
+    closeComparisonBtn: document.getElementById('closeComparisonBtn'),
+    comparisonTableBody: document.getElementById('comparisonTableBody'),
     batchPhotoInput: document.getElementById('batchPhotoInput'),
     selectPhotosBtn: document.getElementById('selectPhotosBtn'),
     photoCountDisplay: document.getElementById('photoCountDisplay'),
@@ -796,12 +1101,15 @@ const elements = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    const savedProvider = localStorage.getItem('llm_active_provider');
-    const activeProvider = LLM_PROVIDERS[savedProvider] ? savedProvider : CONFIG.defaultProvider;
+    ApiKeyManager.migrateLegacyStorage();
+    const { provider: activeProvider } = ApiKeyManager.getActive();
     ApiKeyManager.setActive(activeProvider);
-    elements.llmProvider.value = activeProvider;
-    elements.apiKey.value = ApiKeyManager.get(activeProvider);
-    updateProviderInstructions(activeProvider);
+    elements.providerSelect.value = activeProvider;
+    elements.apiKeyInput.value = ApiKeyManager.get(activeProvider);
+    displayProviderInfo(activeProvider);
+    toggleSaveApiKeyButton();
+    updateCurrentProvider();
+    updateSavedKeysList();
     updateEndpointDebug(activeProvider);
 
     initEventListeners();
@@ -833,31 +1141,74 @@ function initEventListeners() {
 
     initVoiceControls();
 
-    elements.llmProvider.addEventListener('change', (e) => {
-        const provider = e.target.value;
-        ApiKeyManager.setActive(provider);
-        elements.apiKey.value = ApiKeyManager.get(provider);
-        updateProviderInstructions(provider);
-        updateEndpointDebug(provider);
-        checkLLMStatus();
-    });
-
-    elements.saveApiKeyBtn.addEventListener('click', () => {
-        const provider = elements.llmProvider.value;
-        const apiKey = elements.apiKey.value.trim();
-
-        if (!apiKey) {
-            setLastError('API key cannot be empty.');
-            showStatus(elements.llmStatus, '✗ API key cannot be empty', 'error');
+    elements.providerSelect.addEventListener('change', (e) => {
+        const providerId = e.target.value;
+        if (!providerId) {
+            elements.providerInfoCard.classList.add('hidden');
+            elements.apiKeyInput.value = '';
+            toggleSaveApiKeyButton();
             return;
         }
 
-        ApiKeyManager.setActive(provider);
-        ApiKeyManager.save(provider, apiKey);
-        clearLastError();
-        showStatus(elements.llmStatus, `✓ ${getProviderConfig(provider).name} API key saved locally`, 'success');
-        updateEndpointDebug(provider);
+        displayProviderInfo(providerId);
+        ApiKeyManager.setActive(providerId);
+        elements.apiKeyInput.value = ApiKeyManager.get(providerId);
+        updateEndpointDebug(providerId);
+        updateCurrentProvider();
+        toggleSaveApiKeyButton();
         checkLLMStatus();
+    });
+
+    elements.apiKeyInput.addEventListener('input', () => {
+        toggleSaveApiKeyButton();
+    });
+
+    elements.saveApiKeyBtn.addEventListener('click', () => {
+        const providerId = elements.providerSelect.value;
+        const apiKey = elements.apiKeyInput.value.trim();
+
+        if (!providerId || !apiKey) {
+            setLastError('Select a provider and enter an API key.');
+            showStatus(elements.llmStatus, '✗ Select provider and enter API key', 'error');
+            return;
+        }
+
+        ApiKeyManager.saveApiKey(providerId, apiKey);
+        ApiKeyManager.setActive(providerId);
+        clearLastError();
+        showStatus(elements.llmStatus, `✓ ${getProviderConfig(providerId).name} API key saved`, 'success');
+
+        elements.providerSelect.value = '';
+        elements.apiKeyInput.value = '';
+        elements.providerInfoCard.classList.add('hidden');
+        toggleSaveApiKeyButton();
+
+        updateSavedKeysList();
+        updateCurrentProvider();
+        updateEndpointDebug(providerId);
+        checkLLMStatus();
+    });
+
+    elements.getApiKeyBtn.addEventListener('click', openApiKeyPage);
+    elements.showComparisonBtn.addEventListener('click', showProviderComparison);
+    elements.closeComparisonBtn.addEventListener('click', closeComparison);
+    elements.providerComparisonModal.addEventListener('click', (e) => {
+        if (e.target === elements.providerComparisonModal) {
+            closeComparison();
+        }
+    });
+    elements.savedKeysList.addEventListener('click', (e) => {
+        const actionButton = e.target.closest('button[data-action]');
+        if (!actionButton) return;
+
+        const { action, provider } = actionButton.dataset;
+        if (!provider) return;
+
+        if (action === 'use') {
+            setActiveProvider(provider);
+        } else if (action === 'delete') {
+            deleteApiKeyConfirm(provider);
+        }
     });
 
     elements.selectPhotosBtn.addEventListener('click', () => {
@@ -1820,6 +2171,13 @@ async function sendToLLM() {
     const { provider, apiKey } = ApiKeyManager.getActive();
     const providerConfig = getProviderConfig(provider);
 
+    if (!providerSupportsChat(provider)) {
+        const message = `${providerConfig.name} is listed in Settings, but this step currently supports text-generation providers only.`;
+        setLastError(message);
+        showStatus(elements.llmStatus, `✗ ${message}`, 'error');
+        return;
+    }
+
     if (!apiKey) {
         setLastError('No API key set for the selected provider.');
         showStatus(elements.llmStatus, '✗ No API key set. Add one in Settings.', 'error');
@@ -1863,13 +2221,18 @@ async function sendToLLM() {
 
 async function requestLLM({ provider, apiKey, systemPrompt, userPrompt, temperature = 0.7, maxTokens = 2000, timeout = CONFIG.timeout }) {
     const providerConfig = getProviderConfig(provider);
+    if (!providerSupportsChat(provider)) {
+        throw new Error(`${providerConfig.name} is not available for this text-generation workflow yet.`);
+    }
+
     let requestBody;
     let headers = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
     };
+    let requestUrl = providerConfig.apiUrl;
 
-    if (provider === 'anthropic') {
+    if (provider === 'anthropic' || provider === 'anthropic_sonnet') {
         headers = {
             'Content-Type': 'application/json',
             'x-api-key': apiKey,
@@ -1885,6 +2248,34 @@ async function requestLLM({ provider, apiKey, systemPrompt, userPrompt, temperat
                     content: `${systemPrompt}\n\n${userPrompt}`
                 }
             ]
+        };
+    } else if (provider === 'google_gemini') {
+        headers = {
+            'Content-Type': 'application/json'
+        };
+        requestUrl = `${providerConfig.apiUrl}?key=${encodeURIComponent(apiKey)}`;
+        requestBody = {
+            contents: [
+                {
+                    parts: [
+                        {
+                            text: `${systemPrompt}\n\n${userPrompt}`
+                        }
+                    ]
+                }
+            ],
+            generationConfig: {
+                temperature,
+                maxOutputTokens: maxTokens
+            }
+        };
+    } else if (provider === 'cohere') {
+        requestBody = {
+            model: providerConfig.model,
+            preamble: systemPrompt,
+            message: userPrompt,
+            temperature,
+            max_tokens: maxTokens
         };
     } else {
         requestBody = {
@@ -1904,7 +2295,7 @@ async function requestLLM({ provider, apiKey, systemPrompt, userPrompt, temperat
         };
     }
 
-    const response = await fetchWithTimeout(providerConfig.apiUrl, {
+    const response = await fetchWithTimeout(requestUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody),
@@ -1927,8 +2318,16 @@ async function requestLLM({ provider, apiKey, systemPrompt, userPrompt, temperat
     }
 
     const data = await response.json();
-    if (provider === 'anthropic') {
+    if (provider === 'anthropic' || provider === 'anthropic_sonnet') {
         return data?.content?.find((block) => block.type === 'text')?.text || '';
+    }
+
+    if (provider === 'google_gemini') {
+        return data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim() || '';
+    }
+
+    if (provider === 'cohere') {
+        return data?.text || data?.message?.content?.[0]?.text || '';
     }
 
     return data?.choices?.[0]?.message?.content || '';
@@ -1972,6 +2371,11 @@ async function generateVariants() {
     }
 
     const { provider, apiKey } = ApiKeyManager.getActive();
+    if (!providerSupportsChat(provider)) {
+        showStatus(elements.llmStatus, `✗ ${getProviderConfig(provider).name} is not available for text variants yet`, 'error');
+        return;
+    }
+
     if (!apiKey) {
         showStatus(elements.llmStatus, '✗ No API key set. Add one in Settings.', 'error');
         return;
@@ -2362,7 +2766,8 @@ function switchTab(e) {
 
 async function checkLLMStatus() {
     const { provider, apiKey } = ApiKeyManager.getActive();
-    const providerName = getProviderConfig(provider).name;
+    const providerConfig = getProviderConfig(provider);
+    const providerName = providerConfig.name;
 
     if (apiKey) {
         elements.llmStatusDebug.textContent = `✓ ${providerName} (API key set)`;
@@ -2371,6 +2776,9 @@ async function checkLLMStatus() {
         elements.llmStatusDebug.textContent = `⚠ ${providerName} (No API key)`;
         elements.llmStatusDebug.style.color = 'var(--accent)';
     }
+
+    updateCurrentProvider();
+    updateEndpointDebug(provider);
 }
 
 function updateTesseractStatus() {
@@ -2382,12 +2790,121 @@ function updateTesseractStatus() {
     }
 }
 
-function updateProviderInstructions(provider) {
-    const config = getProviderConfig(provider);
-    elements.providerInstructions.innerHTML = `
-        <strong>${config.name}${config.free ? ' (Free)' : ''}</strong><br>
-        ${config.instructions}
-    `;
+function displayProviderInfo(providerId) {
+    const provider = ApiKeyManager.getProvider(providerId);
+    if (!provider) return;
+
+    elements.providerCategory.textContent = provider.category || 'General';
+    elements.providerCost.textContent = formatProviderCost(provider.costPer1M);
+    elements.providerSpeed.textContent = provider.speed || 'Unknown';
+    elements.providerInstructions.textContent = provider.instructions || 'No instructions available.';
+    elements.getApiKeyBtn.dataset.signupUrl = provider.signupUrl || '';
+    elements.providerInfoCard.classList.remove('hidden');
+}
+
+function openApiKeyPage() {
+    const signupUrl = elements.getApiKeyBtn.dataset.signupUrl;
+    if (signupUrl) {
+        window.open(signupUrl, '_blank', 'noopener');
+    }
+}
+
+function updateSavedKeysList() {
+    const container = elements.savedKeysList;
+    const allKeys = ApiKeyManager.getAllSavedKeys();
+
+    if (Object.keys(allKeys).length === 0) {
+        container.innerHTML = '<p class="help-text">No API keys saved yet. Add one to get started.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+    Object.entries(allKeys).forEach(([providerId, key]) => {
+        const provider = ApiKeyManager.getProvider(providerId);
+        if (!provider) return;
+
+        const item = document.createElement('div');
+        item.className = 'saved-key-item';
+
+        const keyPreview = key.length > 8
+            ? `${key.substring(0, 4)}...${key.substring(key.length - 4)}`
+            : 'Saved';
+
+        item.innerHTML = `
+            <div>
+                <div class="saved-key-name">${provider.name}</div>
+                <div class="help-text" style="font-size: 11px;">${keyPreview}</div>
+            </div>
+            <div class="saved-key-actions">
+                <button class="btn btn-secondary" type="button" data-action="use" data-provider="${providerId}">
+                    Use
+                </button>
+                <button class="btn btn-outline" type="button" data-action="delete" data-provider="${providerId}">
+                    Delete
+                </button>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function updateCurrentProvider() {
+    const active = ApiKeyManager.getActive();
+    const provider = getProviderConfig(active.provider);
+    const hasKey = Boolean(active.apiKey);
+
+    elements.currentProviderName.textContent = provider.name;
+    elements.currentProviderCost.textContent = `Cost: ${formatProviderCost(provider.costPer1M)}`;
+    elements.currentProviderSpeed.textContent = `Speed: ${provider.speed || 'Unknown'}${hasKey ? '' : ' • No key saved'}`;
+}
+
+function setActiveProvider(providerId) {
+    ApiKeyManager.setActive(providerId);
+    elements.providerSelect.value = providerId;
+    elements.apiKeyInput.value = ApiKeyManager.getApiKey(providerId);
+    displayProviderInfo(providerId);
+    toggleSaveApiKeyButton();
+    updateCurrentProvider();
+    updateEndpointDebug(providerId);
+    checkLLMStatus();
+    showStatus(elements.llmStatus, `✓ Switched to ${getProviderConfig(providerId).name}`, 'success');
+}
+
+function deleteApiKeyConfirm(providerId) {
+    if (!confirm(`Delete ${getProviderConfig(providerId).name} API key?`)) {
+        return;
+    }
+
+    ApiKeyManager.deleteApiKey(providerId);
+    if (elements.providerSelect.value === providerId) {
+        elements.apiKeyInput.value = '';
+        toggleSaveApiKeyButton();
+    }
+    updateSavedKeysList();
+    updateCurrentProvider();
+    checkLLMStatus();
+    showStatus(elements.llmStatus, '✓ API key deleted', 'success');
+}
+
+function showProviderComparison() {
+    elements.comparisonTableBody.innerHTML = '';
+    ApiKeyManager.getAllProviders().forEach((provider) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${provider.name}</td>
+            <td>${provider.category || 'General'}</td>
+            <td>${provider.speed || 'Unknown'}</td>
+            <td>${Number.isFinite(provider.costPer1M) ? `$${provider.costPer1M}` : 'N/A'}</td>
+            <td>${provider.free ? '✅' : '❌'}</td>
+        `;
+        elements.comparisonTableBody.appendChild(row);
+    });
+
+    elements.providerComparisonModal.classList.remove('hidden');
+}
+
+function closeComparison() {
+    elements.providerComparisonModal.classList.add('hidden');
 }
 
 function updateEndpointDebug(provider) {

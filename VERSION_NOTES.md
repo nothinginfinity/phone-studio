@@ -1,5 +1,24 @@
 # Phone Studio Versions
 
+## V4 Foundation - Comprehensive LLM Provider Support
+
+**New Features:**
+- Provider directory expanded to 15+ BYOK options
+- Active-provider summary in Settings
+- Multi-key local storage with saved-key switching
+- Provider comparison modal for cost, speed, and free-tier review
+- Legacy API keys migrate into the new settings model automatically
+
+**Current Text Workflow Providers:**
+- Groq, Groq 8B Fast, DeepSeek, Mistral, Cerebras, Fireworks, Together
+- OpenAI, Claude, Claude 3.5 Sonnet, Cohere, xAI, Gemini, Perplexity
+
+**Directory-Only Foundations For Later V4.x Work:**
+- EXA
+- Runway
+- Replicate
+- Hugging Face
+
 ## V3.1 - Voice Memo Import & Search
 
 **New Features:**

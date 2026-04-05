@@ -275,6 +275,200 @@ body {
     line-height: 1.5;
 }
 
+.settings-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.settings-section h3 {
+    color: var(--primary);
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+
+.active-provider-info {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.active-provider-info p {
+    margin: 6px 0;
+    font-size: 12px;
+}
+
+.provider-selector {
+    margin-bottom: 16px;
+}
+
+.provider-selector label,
+.api-input-section label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+}
+
+.provider-info-card {
+    background: rgba(0, 122, 255, 0.1);
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.info-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    align-items: start;
+}
+
+.info-row-stacked {
+    grid-template-columns: 80px 1fr;
+}
+
+.info-row .label {
+    margin-bottom: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.provider-info-card p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+#getApiKeyBtn,
+#saveApiKeyBtn,
+#showComparisonBtn {
+    width: 100%;
+}
+
+.api-input-section {
+    margin-bottom: 16px;
+}
+
+#apiKeyInput {
+    margin-bottom: 8px;
+}
+
+.saved-keys-list {
+    display: grid;
+    gap: 8px;
+}
+
+.saved-key-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+}
+
+.saved-key-name {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.saved-key-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.saved-key-actions button {
+    padding: 4px 8px;
+    font-size: 11px;
+    width: auto;
+}
+
+.settings-info {
+    background: rgba(52, 211, 153, 0.1);
+    border-left: 3px solid #34d399;
+    padding: 12px;
+    border-radius: 4px;
+}
+
+.settings-info p {
+    margin: 6px 0;
+}
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.modal-content {
+    background: var(--bg);
+    border-radius: 12px;
+    padding: 20px;
+    max-height: 80vh;
+    overflow-y: auto;
+    width: 90%;
+    max-width: 600px;
+    position: relative;
+}
+
+.modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.comparison-table-container {
+    overflow-x: auto;
+    margin-top: 16px;
+}
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.comparison-table th {
+    background: rgba(0, 122, 255, 0.1);
+    padding: 8px;
+    text-align: left;
+    font-weight: 500;
+    border-bottom: 2px solid var(--border);
+}
+
+.comparison-table td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.comparison-table tr:hover {
+    background: rgba(0, 122, 255, 0.05);
+}
+
 .checkbox-label {
     display: flex;
     align-items: center;
