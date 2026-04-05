@@ -1,4 +1,4 @@
-const CACHE_NAME = 'phone-studio-v4-foundation';
+const CACHE_NAME = 'phone-studio-v4-voice-icloud';
 const APP_SHELL = [
   './',
   './index.html',

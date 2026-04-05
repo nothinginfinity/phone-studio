@@ -1,5 +1,21 @@
 # Phone Studio Versions
 
+## V3.1 Enhanced - iCloud Voice Memo Export + Import
+
+**New Features:**
+- In-app iOS Shortcut setup guide for Voice Memos export
+- iCloud Drive / Files bridge for matching audio and transcript pairs
+- One-click `Check iCloud Drive` and `Import All` workflow
+- Imported memos are summarized, indexed, and marked as iCloud imports
+- Manual transcript-paste import remains as a fallback
+
+**Workflow:**
+1. Record in Voice Memos
+2. Run `Export to Phone Studio`
+3. Save audio + transcript files with matching names
+4. Check iCloud Drive from Phone Studio
+5. Import matched memo pairs into the local memo library
+
 ## V4 Foundation - Comprehensive LLM Provider Support
 
 **New Features:**

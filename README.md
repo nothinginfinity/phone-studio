@@ -212,6 +212,40 @@ Use shortcuts in the Library tab:
 - Key-point extraction
 - Semantic indexing for each memo
 
+## V3.1 Enhanced - Voice Memo Workflow with iCloud Export
+
+### Complete Workflow
+
+**1. Record in Voice Memos (iOS):**
+- Voice Memos auto-transcribes on-device
+- No separate transcription service required
+
+**2. Export via Shortcut:**
+- Run `Export to Phone Studio`
+- Save audio to `iCloud Drive/PhoneStudio/audio/`
+- Save transcript to `iCloud Drive/PhoneStudio/transcripts/`
+
+**3. Import into Phone Studio:**
+- Open the `Voice Memos` tab
+- Tap `Check iCloud Drive`
+- Choose the exported folder or files from Files if prompted
+- Review matched memo pairs
+- Tap `Import All`
+
+**4. Search and Reuse:**
+- Imported memos are summarized and indexed locally
+- Search them alongside photos
+- Generate downstream content from the indexed memo library
+
+### Setup
+
+1. Follow the in-app `Voice Memo Export Setup` guide.
+2. Create the Shortcut recipe shown in the modal.
+3. Enable iCloud Drive and Shortcuts sync on iPhone.
+4. Grant Files access the first time Phone Studio asks for it.
+
+Manual import remains available as a fallback if the Shortcut or Files flow is not available.
+
 **Voice Memo Search:**
 - Search transcripts, summaries, key points, and semantic keywords
 - Browse memo results in the same search interface as photos

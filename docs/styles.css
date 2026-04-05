@@ -206,6 +206,12 @@ body {
     border: 1px solid var(--accent);
 }
 
+.status-message.info {
+    background: rgba(0, 122, 255, 0.1);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+}
+
 /* Tabs */
 .output-tabs {
     display: flex;
@@ -1086,6 +1092,161 @@ body {
     width: auto;
 }
 
+.voice-setup-guide {
+    margin-bottom: 20px;
+}
+
+.setup-step {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.setup-step:last-child {
+    border-bottom: none;
+}
+
+.step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.step-content h4 {
+    margin: 0 0 8px 0;
+    color: var(--text);
+    font-size: 14px;
+}
+
+.step-content ol {
+    padding-left: 20px;
+}
+
+.step-content li {
+    margin-bottom: 6px;
+}
+
+.shortcut-instructions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.shortcut-instructions button {
+    flex: 1;
+}
+
+.shortcut-steps {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.shortcut-action {
+    display: grid;
+    grid-template-columns: 35px 1fr;
+    gap: 12px;
+    background: rgba(0, 122, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.action-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 35px;
+    height: 35px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.action-content strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.action-content p {
+    margin: 4px 0;
+    font-size: 12px;
+}
+
+.icloud-memos-list {
+    background: rgba(0, 122, 255, 0.05);
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 16px;
+}
+
+.icloud-memos-container {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.icloud-memo-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+}
+
+.icloud-memo-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.icloud-memo-name {
+    font-weight: 500;
+    color: var(--primary);
+}
+
+.icloud-memo-meta {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.icloud-memo-status {
+    display: inline-block;
+    background: rgba(52, 211, 153, 0.2);
+    color: #34d399;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.icloud-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
 .audio-player {
     width: 100%;
     margin: 12px 0;
@@ -1164,6 +1325,14 @@ body {
     }
 
     .voice-memo-item {
+        grid-template-columns: 1fr;
+    }
+
+    .setup-step,
+    .shortcut-action,
+    .icloud-memo-item,
+    .icloud-actions,
+    .shortcut-instructions {
         grid-template-columns: 1fr;
     }
 

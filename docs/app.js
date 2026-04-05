@@ -443,6 +443,7 @@ let voiceState = {
     isProcessing: false,
     results: []
 };
+let currentICloudMemos = [];
 
 const VoiceMemoProcessor = {
     async processVoiceMemo(file, transcript, options) {
@@ -588,6 +589,196 @@ const VoiceMemoDB = {
     async clear() {
         const db = await this.init();
         await db.clear(this.storeName);
+    }
+};
+
+const iCloudVoiceMemoBridge = {
+    basePath: 'PhoneStudio',
+    audioFolder: 'audio',
+    transcriptFolder: 'transcripts',
+    processedFolder: 'processed',
+
+    async checkICloud() {
+        try {
+            const exportFiles = await this.getExportFiles();
+            if (exportFiles.length === 0) {
+                return {
+                    found: 0,
+                    memos: [],
+                    error: 'No exported files selected or found.'
+                };
+            }
+
+            const audioFiles = exportFiles.filter((file) => this.isAudioFile(file.name));
+            const transcriptFiles = exportFiles.filter((file) => this.isTranscriptFile(file.name));
+
+            if (audioFiles.length === 0) {
+                return {
+                    found: 0,
+                    memos: [],
+                    error: 'No audio files found. Export memos first or choose the exported audio files.'
+                };
+            }
+
+            const matched = this.matchAudioWithTranscripts(audioFiles, transcriptFiles);
+            const existingMemos = await VoiceMemoDB.getAll();
+            const filtered = this.filterAlreadyImported(matched, existingMemos);
+
+            return {
+                found: filtered.length,
+                memos: filtered,
+                error: null
+            };
+        } catch (error) {
+            console.error('iCloud check error:', error);
+            return {
+                found: 0,
+                memos: [],
+                error: error.message
+            };
+        }
+    },
+
+    async getExportFiles() {
+        if ('showDirectoryPicker' in window) {
+            try {
+                const directoryHandle = await window.showDirectoryPicker({ mode: 'read' });
+                const files = await this.readFilesRecursively(directoryHandle);
+                if (files.length > 0) {
+                    return files;
+                }
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    console.warn('Directory access unavailable, falling back to file selection:', error);
+                } else {
+                    return [];
+                }
+            }
+        }
+
+        return this.getUserFileSelection();
+    },
+
+    async readFilesRecursively(directoryHandle, parentPath = '') {
+        const files = [];
+
+        for await (const entry of directoryHandle.values()) {
+            const entryPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
+
+            if (entry.kind === 'file') {
+                const file = await entry.getFile();
+                files.push({
+                    name: entry.name,
+                    path: entryPath,
+                    file,
+                    size: file.size,
+                    modified: new Date(file.lastModified).toISOString()
+                });
+                continue;
+            }
+
+            if (entry.kind === 'directory') {
+                const nestedFiles = await this.readFilesRecursively(entry, entryPath);
+                files.push(...nestedFiles);
+            }
+        }
+
+        return files;
+    },
+
+    async getUserFileSelection() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = '.m4a,.mp4,.wav,.mp3,.txt,audio/*,text/plain';
+
+        return new Promise((resolve) => {
+            input.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files || []).map((file) => ({
+                    name: file.name,
+                    path: file.name,
+                    file,
+                    size: file.size,
+                    modified: new Date(file.lastModified).toISOString()
+                }));
+                resolve(files);
+            }, { once: true });
+
+            input.click();
+        });
+    },
+
+    matchAudioWithTranscripts(audioFiles, transcriptFiles) {
+        return audioFiles.flatMap((audioFile) => {
+            const baseName = audioFile.name.replace(/\.[^/.]+$/, '');
+            const transcriptFile = transcriptFiles.find((item) => item.name.replace(/\.[^/.]+$/, '') === baseName);
+
+            if (!transcriptFile) {
+                return [];
+            }
+
+            return [{
+                id: `icloud_${baseName}`,
+                baseName,
+                audioFile,
+                transcriptFile,
+                timestamp: audioFile.modified || new Date().toISOString(),
+                readyForImport: true
+            }];
+        });
+    },
+
+    filterAlreadyImported(memos, existingMemos) {
+        const importedPaths = new Set(
+            existingMemos
+                .filter((memo) => memo.imported_from_icloud && memo.icloud_path)
+                .map((memo) => memo.icloud_path)
+        );
+
+        return memos.filter((memo) => !importedPaths.has(memo.baseName));
+    },
+
+    isAudioFile(filename) {
+        return /\.(m4a|mp4|wav|mp3|mpeg)$/i.test(filename);
+    },
+
+    isTranscriptFile(filename) {
+        return /\.txt$/i.test(filename);
+    },
+
+    async importMemo(matched, options = { summarize: true, extractKeypoints: true }) {
+        try {
+            const transcriptText = await this.readTextFile(matched.transcriptFile.file);
+            const memoData = await VoiceMemoProcessor.processVoiceMemo(
+                matched.audioFile.file,
+                transcriptText,
+                options
+            );
+
+            if (!memoData) {
+                return { success: false, error: 'Failed to process memo.' };
+            }
+
+            memoData.imported_from_icloud = true;
+            memoData.icloud_path = matched.baseName;
+            memoData.transcript_source = 'ios_voice_memos';
+            memoData.file_name = matched.audioFile.name;
+
+            await VoiceMemoDB.saveMemo(memoData);
+            return { success: true, memoData };
+        } catch (error) {
+            console.error('Import error:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    async readTextFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result || '');
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
     }
 };
 
@@ -1064,6 +1255,17 @@ const elements = {
     libraryList: document.getElementById('libraryList'),
     libraryItems: document.getElementById('libraryItems'),
     quickSearchBtns: document.querySelectorAll('.quick-search-btn'),
+    showShortcutBtn: document.getElementById('showShortcutBtn'),
+    copyShortcutBtn: document.getElementById('copyShortcutBtn'),
+    shortcutModal: document.getElementById('shortcutModal'),
+    closeShortcutModalBtn: document.getElementById('closeShortcutModalBtn'),
+    checkICloudBtn: document.getElementById('checkICloudBtn'),
+    icloudStatus: document.getElementById('icloudStatus'),
+    icloudMemosList: document.getElementById('icloudMemosList'),
+    foundMemosCount: document.getElementById('foundMemosCount'),
+    icloudMemosContainer: document.getElementById('icloudMemosContainer'),
+    importAllICloudBtn: document.getElementById('importAllICloudBtn'),
+    refreshICloudBtn: document.getElementById('refreshICloudBtn'),
     voiceMemoInput: document.getElementById('voiceMemoInput'),
     selectVoiceMemosBtn: document.getElementById('selectVoiceMemosBtn'),
     voiceMemoCountDisplay: document.getElementById('voiceMemoCountDisplay'),
@@ -1258,6 +1460,57 @@ function initEventListeners() {
             quickSearch(btn.dataset.term);
         });
     });
+
+    elements.showShortcutBtn.addEventListener('click', () => {
+        elements.shortcutModal.classList.remove('hidden');
+    });
+    elements.copyShortcutBtn.addEventListener('click', copyShortcutCode);
+    elements.closeShortcutModalBtn.addEventListener('click', closeShortcutModal);
+    elements.shortcutModal.addEventListener('click', (e) => {
+        if (e.target === elements.shortcutModal) {
+            closeShortcutModal();
+        }
+    });
+    elements.checkICloudBtn.addEventListener('click', async () => {
+        elements.checkICloudBtn.disabled = true;
+        showStatus(elements.icloudStatus, '☁️ Checking iCloud Drive...', 'info');
+
+        const result = await iCloudVoiceMemoBridge.checkICloud();
+
+        if (result.error) {
+            currentICloudMemos = [];
+            elements.icloudMemosList.classList.add('hidden');
+            showStatus(elements.icloudStatus, `✗ Error: ${result.error}`, 'error');
+            elements.checkICloudBtn.disabled = false;
+            return;
+        }
+
+        if (result.found === 0) {
+            currentICloudMemos = [];
+            elements.icloudMemosList.classList.add('hidden');
+            showStatus(elements.icloudStatus, '✓ No new memos found. Run the Shortcut first or choose the exported files.', 'info');
+            elements.checkICloudBtn.disabled = false;
+            return;
+        }
+
+        displayICloudMemos(result.memos);
+        elements.icloudMemosList.classList.remove('hidden');
+        showStatus(elements.icloudStatus, `✓ Found ${result.found} memo(s) ready to import`, 'success');
+        elements.checkICloudBtn.disabled = false;
+    });
+    elements.importAllICloudBtn.addEventListener('click', importAllICloudMemos);
+    elements.refreshICloudBtn.addEventListener('click', () => {
+        elements.checkICloudBtn.click();
+    });
+    elements.icloudMemosContainer.addEventListener('click', (e) => {
+        const button = e.target.closest('button[data-icloud-index]');
+        if (!button) return;
+
+        const index = Number(button.dataset.icloudIndex);
+        if (!Number.isNaN(index)) {
+            importSingleICloudMemo(index);
+        }
+    });
     elements.selectVoiceMemosBtn.addEventListener('click', () => {
         elements.voiceMemoInput.click();
     });
@@ -1394,6 +1647,128 @@ async function processOneVoiceMemo(file, options, index, total) {
     }
 }
 
+function displayICloudMemos(memos) {
+    currentICloudMemos = memos;
+    elements.icloudMemosContainer.innerHTML = '';
+    elements.foundMemosCount.textContent = String(memos.length);
+
+    memos.forEach((memo, index) => {
+        const item = document.createElement('div');
+        item.className = 'icloud-memo-item';
+        item.dataset.memoId = memo.id;
+        item.dataset.memoIndex = String(index);
+
+        const audioSize = memo.audioFile?.size ? `${(memo.audioFile.size / 1024 / 1024).toFixed(1)}MB` : 'Unknown size';
+
+        item.innerHTML = `
+            <div class="icloud-memo-info">
+                <div class="icloud-memo-name">${escapeHtml(memo.baseName)}</div>
+                <div class="icloud-memo-meta">
+                    Audio: ${escapeHtml(audioSize)} • Transcript: ${escapeHtml(memo.transcriptFile.name)}
+                </div>
+            </div>
+            <div class="icloud-memo-status">✓ Ready</div>
+            <button class="btn btn-secondary btn-small" type="button" data-icloud-index="${index}">
+                Import
+            </button>
+        `;
+
+        elements.icloudMemosContainer.appendChild(item);
+    });
+}
+
+async function importSingleICloudMemo(index) {
+    const memo = currentICloudMemos[index];
+    if (!memo) return;
+
+    const result = await iCloudVoiceMemoBridge.importMemo(memo, {
+        summarize: elements.voiceSummarize.checked,
+        extractKeypoints: elements.voiceExtractKeypoints.checked
+    });
+
+    if (result.success) {
+        currentICloudMemos = currentICloudMemos.filter((_, itemIndex) => itemIndex !== index);
+        if (currentICloudMemos.length > 0) {
+            displayICloudMemos(currentICloudMemos);
+        } else {
+            elements.icloudMemosList.classList.add('hidden');
+        }
+        await updateVoiceLibraryDisplay();
+        showStatus(elements.icloudStatus, `✓ Imported: ${memo.baseName}`, 'success');
+        return;
+    }
+
+    showStatus(elements.icloudStatus, `✗ Failed: ${result.error}`, 'error');
+}
+
+async function importAllICloudMemos() {
+    if (currentICloudMemos.length === 0) {
+        showStatus(elements.icloudStatus, '✗ No iCloud memos queued for import.', 'error');
+        return;
+    }
+
+    elements.importAllICloudBtn.disabled = true;
+    let imported = 0;
+    let failed = 0;
+
+    for (const memo of currentICloudMemos) {
+        const result = await iCloudVoiceMemoBridge.importMemo(memo, {
+            summarize: elements.voiceSummarize.checked,
+            extractKeypoints: elements.voiceExtractKeypoints.checked
+        });
+
+        if (result.success) {
+            imported += 1;
+        } else {
+            failed += 1;
+        }
+    }
+
+    const message = `✓ Imported ${imported} memo(s)${failed > 0 ? `, ${failed} failed` : ''}`;
+    showStatus(elements.icloudStatus, message, imported > 0 ? 'success' : 'error');
+
+    currentICloudMemos = [];
+    elements.icloudMemosList.classList.add('hidden');
+    elements.importAllICloudBtn.disabled = false;
+    await updateVoiceLibraryDisplay();
+}
+
+function closeShortcutModal() {
+    elements.shortcutModal.classList.add('hidden');
+}
+
+async function copyShortcutCode() {
+    const instructions = `Export to Phone Studio - iOS Shortcuts Recipe
+
+1. Create a shortcut named "Export to Phone Studio"
+2. Ask for Voice Memo
+3. Get File of provided voice memo
+4. Get Details of provided voice memo
+5. Get or copy the transcript from Voice Memos
+6. Get Current Date and format it as MEMO_[ISO date]
+7. Save audio to iCloud Drive/PhoneStudio/audio/
+8. Save transcript to iCloud Drive/PhoneStudio/transcripts/
+9. Show Result: Exported to Phone Studio!
+
+Then: record memo -> run shortcut -> open Phone Studio -> Check iCloud Drive -> Import All`;
+
+    try {
+        await navigator.clipboard.writeText(instructions);
+        showStatus(elements.voiceStatus, '✓ Shortcut recipe copied', 'success');
+    } catch (error) {
+        const blob = new Blob([instructions], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'ExportToPhoneStudio-Shortcut-Instructions.txt';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showStatus(elements.voiceStatus, '✓ Shortcut recipe downloaded', 'success');
+    }
+}
+
 function updateVoiceProgressUI(current, total) {
     const percent = Math.round((current / total) * 100);
     elements.voiceProgressText.textContent = `Processing ${current}/${total}`;
@@ -1419,9 +1794,10 @@ async function updateVoiceLibraryDisplay() {
 
                 const info = document.createElement('div');
                 info.className = 'voice-memo-item-info';
+                const sourceLabel = memo.imported_from_icloud ? ' • iCloud import' : '';
                 info.innerHTML = `
                     <div class="voice-memo-item-title">${escapeHtml(memo.file_name)}</div>
-                    <div class="voice-memo-item-meta">${new Date(memo.timestamp).toLocaleDateString()} • ${Math.round((memo.duration_seconds || 0) / 60)} min</div>
+                    <div class="voice-memo-item-meta">${new Date(memo.timestamp).toLocaleDateString()} • ${Math.round((memo.duration_seconds || 0) / 60)} min${escapeHtml(sourceLabel)}</div>
                 `;
 
                 const actions = document.createElement('div');

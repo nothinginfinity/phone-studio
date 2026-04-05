@@ -375,9 +375,153 @@
                 </div>
 
                 <div class="batch-tab-content" id="voiceMemosTab">
+                    <section class="voice-setup-guide" id="voiceMemoSetupGuide">
+                        <h3>📱 Voice Memo Export Setup</h3>
+                        <p class="help-text">Set up an iPhone Shortcut so Voice Memos exports audio and transcript files together.</p>
+
+                        <div class="setup-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <h4>Create iOS Shortcut</h4>
+                                <p class="help-text">Open Shortcuts on iPhone and create a new shortcut using the export recipe below.</p>
+                                <div class="shortcut-instructions">
+                                    <button id="showShortcutBtn" class="btn btn-primary">📋 Show Shortcut Instructions</button>
+                                    <button id="copyShortcutBtn" class="btn btn-secondary">📋 Copy Shortcut Recipe</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setup-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <h4>Enable iCloud Drive</h4>
+                                <p class="help-text">Make sure iCloud Drive and Shortcuts syncing are enabled on the iPhone.</p>
+                                <ol class="help-text" style="margin-left: 16px;">
+                                    <li>Settings → [Your Name] → iCloud</li>
+                                    <li>Toggle on iCloud Drive</li>
+                                    <li>Toggle on Shortcuts for iCloud sync</li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        <div class="setup-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <h4>Grant Files Access</h4>
+                                <p class="help-text">The first import may ask Phone Studio to access Files or an exported folder. Allow access so matching audio and transcript files can be read.</p>
+                            </div>
+                        </div>
+
+                        <div class="setup-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <h4>Record → Export → Import</h4>
+                                <ol class="help-text" style="margin-left: 16px;">
+                                    <li>Record in Voice Memos and let iOS transcribe it</li>
+                                    <li>Run the Shortcut: “Export to Phone Studio”</li>
+                                    <li>Save audio to `iCloud Drive/PhoneStudio/audio/`</li>
+                                    <li>Save transcript to `iCloud Drive/PhoneStudio/transcripts/`</li>
+                                    <li>In Phone Studio, tap `Check iCloud Drive` and then `Import All`</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div id="shortcutModal" class="modal hidden">
+                        <div class="modal-content">
+                            <button id="closeShortcutModalBtn" class="modal-close" type="button">✕</button>
+                            <h3>Export to Phone Studio Shortcut</h3>
+                            <p class="help-text">In Shortcuts, create a new shortcut and add these actions in order:</p>
+
+                            <div class="shortcut-steps">
+                                <div class="shortcut-action">
+                                    <div class="action-number">1</div>
+                                    <div class="action-content">
+                                        <strong>Ask for Voice Memo</strong>
+                                        <p class="help-text">Let the user select a memo from the Voice Memos library.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">2</div>
+                                    <div class="action-content">
+                                        <strong>Get File</strong>
+                                        <p class="help-text">Get the audio file for the selected voice memo.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">3</div>
+                                    <div class="action-content">
+                                        <strong>Get Details of Voice Memo</strong>
+                                        <p class="help-text">Capture metadata like date and duration.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">4</div>
+                                    <div class="action-content">
+                                        <strong>Get Transcript</strong>
+                                        <p class="help-text">Use the iOS transcript text from Voice Memos and save it as plain text.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">5</div>
+                                    <div class="action-content">
+                                        <strong>Generate Timestamp Filename</strong>
+                                        <p class="help-text">Format the current date as `MEMO_[date_time]` so audio and transcript filenames match.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">6</div>
+                                    <div class="action-content">
+                                        <strong>Save Audio to iCloud Drive</strong>
+                                        <p class="help-text">Folder: `iCloud Drive/PhoneStudio/audio/` with filename `[timestamp].m4a`.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">7</div>
+                                    <div class="action-content">
+                                        <strong>Save Transcript to iCloud Drive</strong>
+                                        <p class="help-text">Folder: `iCloud Drive/PhoneStudio/transcripts/` with filename `[timestamp].txt`.</p>
+                                    </div>
+                                </div>
+                                <div class="shortcut-action">
+                                    <div class="action-number">8</div>
+                                    <div class="action-content">
+                                        <strong>Show Success Message</strong>
+                                        <p class="help-text">Confirm export so the user knows the files are ready for Phone Studio.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="voice-section">
-                        <h3>Import Voice Memos</h3>
-                        <p class="help-text">Import voice memos from iOS Voice Memos. Paste the iOS transcript when prompted so it can be indexed.</p>
+                        <h3>Check iCloud for New Memos</h3>
+                        <p class="help-text">After running the Shortcut, import matched audio and transcript files here. If direct iCloud folder access is limited, choose the exported files manually from Files.</p>
+
+                        <button id="checkICloudBtn" class="btn btn-primary">
+                            ☁️ Check iCloud Drive
+                        </button>
+
+                        <div id="icloudStatus" class="status-message hidden"></div>
+
+                        <div id="icloudMemosList" class="icloud-memos-list hidden">
+                            <p class="help-text">Found <strong id="foundMemosCount">0</strong> memo(s) ready to import:</p>
+                            <div id="icloudMemosContainer" class="icloud-memos-container"></div>
+
+                            <div class="icloud-actions">
+                                <button id="importAllICloudBtn" class="btn btn-accent">
+                                    📥 Import All
+                                </button>
+                                <button id="refreshICloudBtn" class="btn btn-secondary">
+                                    🔄 Refresh
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="voice-section">
+                        <h3>Manual Voice Memo Import</h3>
+                        <p class="help-text">Fallback flow: manually select memo files and paste the transcript when prompted.</p>
 
                         <div class="upload-area">
                             <input type="file" id="voiceMemoInput" accept="audio/m4a,audio/mp4,audio/wav,audio/mpeg" multiple class="hidden-input">
