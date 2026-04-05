@@ -33,6 +33,24 @@
                 <img id="imagePreview" class="image-preview hidden" alt="Screenshot preview">
             </section>
 
+            <!-- Voice Recording Linking -->
+            <section class="panel voice-panel">
+                <h2>Step 1B: Link Voice Recording (Optional)</h2>
+                <div class="voice-controls">
+                    <button id="recordVoiceBtn" class="btn btn-secondary">
+                        🎙️ Record Voice (Hold to Record)
+                    </button>
+                    <button id="stopRecordBtn" class="btn btn-secondary" disabled style="display: none;">
+                        ⏹️ Stop Recording
+                    </button>
+                    <div id="voicePreview" class="voice-preview hidden">
+                        <audio id="voicePlayback" controls style="width: 100%; margin: 8px 0;"></audio>
+                        <button id="clearVoiceBtn" class="btn btn-outline">🗑️ Clear Recording</button>
+                    </div>
+                    <p class="help-text">Optional: Record your thoughts about this screenshot. Linked to final output.</p>
+                </div>
+            </section>
+
             <!-- Step 2: OCR Processing -->
             <section class="panel ocr-panel">
                 <h2>Step 2: Extract Text (OCR)</h2>
@@ -80,6 +98,50 @@
                 <textarea id="rawOutput" class="textarea output-textarea hidden" readonly></textarea>
             </section>
 
+            <!-- Variants Generation -->
+            <section class="panel variants-panel">
+                <h2>Generate Content Variants</h2>
+                <p class="help-text">Generate multiple versions for different platforms from this screenshot's data.</p>
+
+                <div class="variant-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="variantInstagram" checked> Instagram Caption
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="variantTiktok"> TikTok Caption (shorter)
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="variantEmail"> Email Subject + Preview
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="variantLinkedin"> LinkedIn Post
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="variantIdeas"> 3 Content Ideas
+                    </label>
+                </div>
+
+                <button id="generateVariantsBtn" class="btn btn-accent" disabled>
+                    ✨ Generate All Variants
+                </button>
+
+                <div id="variantsOutput" class="variants-output hidden">
+                    <div id="variantsContainer" class="variants-container"></div>
+                </div>
+            </section>
+
+            <!-- Lead Extraction -->
+            <section class="panel leads-panel">
+                <h2>Extracted Leads</h2>
+                <button id="extractLeadsBtn" class="btn btn-secondary" disabled>
+                    🔍 Extract Emails & Contacts
+                </button>
+                <div id="leadsOutput" class="leads-output hidden">
+                    <div id="leadsContainer" class="leads-container"></div>
+                </div>
+                <p class="help-text" id="leadsStatus"></p>
+            </section>
+
             <!-- Step 6: Actions -->
             <section class="panel actions-panel">
                 <h2>Step 6: Save & Next</h2>
@@ -103,7 +165,8 @@
                 <div class="settings-group">
                     <label for="llmProvider" class="label">LLM Provider</label>
                     <select id="llmProvider" class="select">
-                        <option value="groq">Groq (Free, Fast)</option>
+                        <option value="groq">Groq 70B (Free, Powerful)</option>
+                        <option value="groq_fast">Groq 8B (Free, Fast)</option>
                         <option value="deepseek">DeepSeek</option>
                         <option value="mistral">Mistral AI (Free)</option>
                         <option value="anthropic">Claude (Anthropic)</option>

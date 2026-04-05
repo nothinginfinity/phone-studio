@@ -11,6 +11,15 @@
 - Debug panel for LLM, OCR, storage, and endpoint status
 - Local IndexedDB persistence for processed records
 
+## V1.5 Features
+
+- Groq 70B plus Groq 8B fast model options
+- Voice recording linked to screenshot records
+- Variant generation for Instagram, TikTok, email, LinkedIn, and ideas
+- Lead extraction for emails and phone numbers
+- Approval state now defaults to `pending_review`
+- Richer JSON output with voice, lead, and variant metadata
+
 ## Known Limitations
 
 - LLM processing is manually triggered
@@ -18,14 +27,8 @@
 - No backend sync yet
 - No automated social posting
 - OCR quality still depends on screenshot clarity
+- Voice notes are linked locally but not transcribed yet
 - Offline support is limited to cached app shell assets
-
-## V1.5 Roadmap
-
-- Auto-generate content variants from a single screenshot
-- Extract leads such as names, emails, and phone numbers
-- Add basic scheduling and approval queue screens
-- Improve local caching and saved draft recovery
 
 ## V2 Roadmap
 

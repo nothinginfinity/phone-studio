@@ -1,14 +1,20 @@
 // V1 MVP: Local LLM integration. All processing on-device, no backend yet.
-// V1.1 adds hosted LLM provider support while preserving the local-first path.
+// V1.5 adds hosted LLMs, voice linking, variants, and lead extraction.
 
-// Multi-LLM Provider Configuration
 const LLM_PROVIDERS = {
     groq: {
         name: 'Groq',
         apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
         model: 'llama-3.1-70b-versatile',
         free: true,
-        instructions: 'Get free API key at: https://console.groq.com/keys'
+        instructions: 'Get free API key at: https://console.groq.com/keys (60 requests/min free tier)'
+    },
+    groq_fast: {
+        name: 'Groq (Fast)',
+        apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
+        model: 'llama-3.1-8b-instant',
+        free: true,
+        instructions: 'Same Groq API key. This is the fast/light model. Get key at: https://console.groq.com/keys'
     },
     deepseek: {
         name: 'DeepSeek',
@@ -50,12 +56,12 @@ const LLM_PROVIDERS = {
 const CONFIG = {
     defaultProvider: 'groq',
     timeout: 30000,
+    variantTimeout: 20000,
     DB_NAME: 'PhoneStudio',
     DB_VERSION: 1,
     STORE_NAME: 'screenshots',
 };
 
-// Local Storage for API Keys
 const ApiKeyManager = {
     save: (provider, apiKey) => {
         localStorage.setItem(`llm_api_key_${provider}`, apiKey);
@@ -79,25 +85,38 @@ function getProviderConfig(provider) {
     return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
 }
 
-// State
 let db = null;
+let mediaRecorder = null;
+let mediaStream = null;
+let audioChunks = [];
+
 let state = {
     screenshot: null,
     rawText: '',
     llmOutput: '',
+    voiceRecording: null,
+    voiceDataUrl: null,
+    voiceDurationSeconds: null,
+    variants: [],
+    leads: [],
     currentRecord: null,
     metadata: {
         timestamp: null,
         imageSize: null,
         ocrConfidence: null,
+        voiceLinked: false,
     }
 };
 
-// DOM Elements
 const elements = {
     uploadBtn: document.getElementById('uploadBtn'),
     screenshotInput: document.getElementById('screenshotInput'),
     imagePreview: document.getElementById('imagePreview'),
+    recordVoiceBtn: document.getElementById('recordVoiceBtn'),
+    stopRecordBtn: document.getElementById('stopRecordBtn'),
+    clearVoiceBtn: document.getElementById('clearVoiceBtn'),
+    voicePreview: document.getElementById('voicePreview'),
+    voicePlayback: document.getElementById('voicePlayback'),
     ocrBtn: document.getElementById('ocrBtn'),
     ocrStatus: document.getElementById('ocrStatus'),
     rawText: document.getElementById('rawText'),
@@ -108,6 +127,13 @@ const elements = {
     jsonOutput: document.getElementById('jsonOutput'),
     markdownOutput: document.getElementById('markdownOutput'),
     rawOutput: document.getElementById('rawOutput'),
+    generateVariantsBtn: document.getElementById('generateVariantsBtn'),
+    variantsOutput: document.getElementById('variantsOutput'),
+    variantsContainer: document.getElementById('variantsContainer'),
+    extractLeadsBtn: document.getElementById('extractLeadsBtn'),
+    leadsOutput: document.getElementById('leadsOutput'),
+    leadsContainer: document.getElementById('leadsContainer'),
+    leadsStatus: document.getElementById('leadsStatus'),
     downloadBtn: document.getElementById('downloadBtn'),
     copyBtn: document.getElementById('copyBtn'),
     resetBtn: document.getElementById('resetBtn'),
@@ -121,9 +147,13 @@ const elements = {
     apiKey: document.getElementById('apiKey'),
     saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
     providerInstructions: document.getElementById('providerInstructions'),
+    variantInstagram: document.getElementById('variantInstagram'),
+    variantTiktok: document.getElementById('variantTiktok'),
+    variantEmail: document.getElementById('variantEmail'),
+    variantLinkedin: document.getElementById('variantLinkedin'),
+    variantIdeas: document.getElementById('variantIdeas'),
 };
 
-// Initialize
 document.addEventListener('DOMContentLoaded', () => {
     const savedProvider = localStorage.getItem('llm_active_provider');
     const activeProvider = LLM_PROVIDERS[savedProvider] ? savedProvider : CONFIG.defaultProvider;
@@ -148,10 +178,16 @@ function initEventListeners() {
     elements.screenshotInput.addEventListener('change', handleScreenshotUpload);
     elements.ocrBtn.addEventListener('click', runOCR);
     elements.llmBtn.addEventListener('click', sendToLLM);
+    elements.generateVariantsBtn.addEventListener('click', generateVariants);
+    elements.extractLeadsBtn.addEventListener('click', extractLeads);
     elements.downloadBtn.addEventListener('click', downloadJSON);
     elements.copyBtn.addEventListener('click', copyJSON);
     elements.resetBtn.addEventListener('click', resetApp);
     elements.llmPrompt.addEventListener('change', toggleCustomPrompt);
+    elements.voicePlayback.addEventListener('loadedmetadata', handleVoiceMetadata);
+
+    initVoiceControls();
+
     elements.llmProvider.addEventListener('change', (e) => {
         const provider = e.target.value;
         ApiKeyManager.setActive(provider);
@@ -160,6 +196,7 @@ function initEventListeners() {
         updateEndpointDebug(provider);
         checkLLMStatus();
     });
+
     elements.saveApiKeyBtn.addEventListener('click', () => {
         const provider = elements.llmProvider.value;
         const apiKey = elements.apiKey.value.trim();
@@ -173,16 +210,162 @@ function initEventListeners() {
         ApiKeyManager.setActive(provider);
         ApiKeyManager.save(provider, apiKey);
         clearLastError();
-        showStatus(elements.llmStatus, `✓ ${LLM_PROVIDERS[provider].name} API key saved locally`, 'success');
+        showStatus(elements.llmStatus, `✓ ${getProviderConfig(provider).name} API key saved locally`, 'success');
         updateEndpointDebug(provider);
         checkLLMStatus();
     });
+
     elements.tabBtns.forEach((btn) => {
         btn.addEventListener('click', switchTab);
     });
 }
 
-// Screenshot Upload
+function initVoiceControls() {
+    if (!elements.recordVoiceBtn || !elements.stopRecordBtn || !elements.clearVoiceBtn) {
+        return;
+    }
+
+    if (window.PointerEvent) {
+        elements.recordVoiceBtn.addEventListener('pointerdown', async (event) => {
+            event.preventDefault();
+            if (event.pointerId !== undefined && elements.recordVoiceBtn.setPointerCapture) {
+                try {
+                    elements.recordVoiceBtn.setPointerCapture(event.pointerId);
+                } catch (error) {
+                    // Ignore capture errors.
+                }
+            }
+            await startVoiceRecording();
+        });
+
+        const stopEvents = ['pointerup', 'pointercancel', 'lostpointercapture', 'pointerleave'];
+        stopEvents.forEach((eventName) => {
+            elements.recordVoiceBtn.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                stopVoiceRecording();
+            });
+        });
+    } else {
+        elements.recordVoiceBtn.addEventListener('click', async () => {
+            if (mediaRecorder?.state === 'recording') {
+                stopVoiceRecording();
+            } else {
+                await startVoiceRecording();
+            }
+        });
+    }
+
+    elements.stopRecordBtn.addEventListener('click', stopVoiceRecording);
+    elements.clearVoiceBtn.addEventListener('click', clearVoiceRecording);
+}
+
+function updateVoiceButtons(isRecording) {
+    elements.recordVoiceBtn.textContent = isRecording
+        ? '🎙️ Recording... release to stop'
+        : '🎙️ Record Voice (Hold to Record)';
+    elements.stopRecordBtn.style.display = isRecording ? 'inline-block' : 'none';
+    elements.stopRecordBtn.disabled = !isRecording;
+}
+
+async function ensureMediaRecorder() {
+    if (mediaRecorder) {
+        return true;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        setLastError('Voice recording is not supported in this browser.');
+        showStatus(elements.llmStatus, '✗ Voice recording is not supported on this device/browser.', 'error');
+        return false;
+    }
+
+    try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(mediaStream);
+
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data?.size) {
+                audioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            audioChunks = [];
+
+            if (state.voiceDataUrl) {
+                URL.revokeObjectURL(state.voiceDataUrl);
+            }
+
+            state.voiceRecording = audioBlob;
+            state.voiceDataUrl = URL.createObjectURL(audioBlob);
+            state.voiceDurationSeconds = estimateAudioDuration(audioBlob);
+            state.metadata.voiceLinked = true;
+
+            elements.voicePlayback.src = state.voiceDataUrl;
+            elements.voicePreview.classList.remove('hidden');
+            updateVoiceButtons(false);
+
+            buildOutput().catch((error) => {
+                setLastError(`Output refresh failed: ${error.message}`);
+            });
+        };
+
+        return true;
+    } catch (error) {
+        console.error('Microphone access denied:', error);
+        setLastError(`Microphone access failed: ${error.message}`);
+        showStatus(elements.llmStatus, '✗ Microphone access denied or unavailable.', 'error');
+        return false;
+    }
+}
+
+async function startVoiceRecording() {
+    const ready = await ensureMediaRecorder();
+    if (!ready || !mediaRecorder || mediaRecorder.state !== 'inactive') {
+        return;
+    }
+
+    clearLastError();
+    audioChunks = [];
+    mediaRecorder.start();
+    updateVoiceButtons(true);
+}
+
+function stopVoiceRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+}
+
+function clearVoiceRecording() {
+    if (state.voiceDataUrl) {
+        URL.revokeObjectURL(state.voiceDataUrl);
+    }
+
+    state.voiceRecording = null;
+    state.voiceDataUrl = null;
+    state.voiceDurationSeconds = null;
+    state.metadata.voiceLinked = false;
+    audioChunks = [];
+    elements.voicePlayback.removeAttribute('src');
+    elements.voicePreview.classList.add('hidden');
+    updateVoiceButtons(false);
+
+    buildOutput().catch((error) => {
+        setLastError(`Output refresh failed: ${error.message}`);
+    });
+}
+
+function handleVoiceMetadata() {
+    if (Number.isFinite(elements.voicePlayback.duration) && elements.voicePlayback.duration > 0) {
+        state.voiceDurationSeconds = Math.round(elements.voicePlayback.duration);
+    }
+}
+
+function estimateAudioDuration(audioBlob) {
+    return Math.max(1, Math.round(audioBlob.size / 16000));
+}
+
 function handleScreenshotUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -206,7 +389,6 @@ function handleScreenshotUpload(e) {
     reader.readAsDataURL(file);
 }
 
-// OCR Processing
 async function runOCR() {
     if (!state.screenshot) return;
 
@@ -225,10 +407,14 @@ async function runOCR() {
 
         state.rawText = text;
         state.metadata.ocrConfidence = confidence;
+        state.leads = extractLeadEntries(state.rawText);
 
         elements.rawText.value = state.rawText;
         showStatus(elements.ocrStatus, `✓ OCR complete (${Math.round(confidence)}% confidence)`, 'success');
         elements.llmBtn.disabled = false;
+        elements.extractLeadsBtn.disabled = false;
+
+        await buildOutput();
     } catch (error) {
         console.error('OCR Error:', error);
         setLastError(`OCR failed: ${error.message}`);
@@ -238,7 +424,6 @@ async function runOCR() {
     }
 }
 
-// LLM Processing
 async function sendToLLM() {
     if (!state.rawText) return;
 
@@ -257,79 +442,15 @@ async function sendToLLM() {
 
     try {
         const prompt = buildPrompt();
-        let requestBody;
-        let headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        };
-
-        if (provider === 'anthropic') {
-            headers = {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'anthropic-dangerous-direct-browser-access': 'true'
-            };
-            requestBody = {
-                model: providerConfig.model,
-                max_tokens: 2000,
-                messages: [
-                    {
-                        role: 'user',
-                        content: `You are a content strategist helping extract structured information from screenshots.\n\n${prompt}`
-                    }
-                ]
-            };
-        } else {
-            requestBody = {
-                model: providerConfig.model,
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are a content strategist helping extract structured information from screenshots.'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                temperature: 0.7,
-                max_tokens: 2000
-            };
-        }
-
-        const response = await fetchWithTimeout(providerConfig.apiUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(requestBody),
-        }, CONFIG.timeout);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            let message = response.statusText;
-
-            if (errorText) {
-                try {
-                    const errorData = JSON.parse(errorText);
-                    message = errorData.error?.message || errorData.message || errorText;
-                } catch (parseError) {
-                    message = errorText;
-                }
-            }
-
-            throw new Error(`${providerConfig.name} error: ${message}`);
-        }
-
-        const data = await response.json();
-        let llmOutput = '';
-
-        if (provider === 'anthropic') {
-            llmOutput = data?.content?.find((block) => block.type === 'text')?.text || '';
-        } else {
-            llmOutput = data?.choices?.[0]?.message?.content || '';
-        }
-
-        state.llmOutput = llmOutput;
+        state.llmOutput = await requestLLM({
+            provider,
+            apiKey,
+            systemPrompt: 'You are a content strategist helping extract structured information from screenshots.',
+            userPrompt: prompt,
+            temperature: 0.7,
+            maxTokens: 2000,
+            timeout: CONFIG.timeout
+        });
 
         if (!state.llmOutput) {
             throw new Error(`No text was returned by ${providerConfig.name}.`);
@@ -340,6 +461,7 @@ async function sendToLLM() {
 
         elements.downloadBtn.disabled = false;
         elements.copyBtn.disabled = false;
+        elements.generateVariantsBtn.disabled = false;
     } catch (error) {
         console.error('LLM Error:', error);
         setLastError(`LLM failed: ${error.message}`);
@@ -349,41 +471,277 @@ async function sendToLLM() {
     }
 }
 
-// Build Prompt based on selection
+async function requestLLM({ provider, apiKey, systemPrompt, userPrompt, temperature = 0.7, maxTokens = 2000, timeout = CONFIG.timeout }) {
+    const providerConfig = getProviderConfig(provider);
+    let requestBody;
+    let headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+    };
+
+    if (provider === 'anthropic') {
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+        };
+        requestBody = {
+            model: providerConfig.model,
+            max_tokens: maxTokens,
+            messages: [
+                {
+                    role: 'user',
+                    content: `${systemPrompt}\n\n${userPrompt}`
+                }
+            ]
+        };
+    } else {
+        requestBody = {
+            model: providerConfig.model,
+            messages: [
+                {
+                    role: 'system',
+                    content: systemPrompt
+                },
+                {
+                    role: 'user',
+                    content: userPrompt
+                }
+            ],
+            temperature,
+            max_tokens: maxTokens
+        };
+    }
+
+    const response = await fetchWithTimeout(providerConfig.apiUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+    }, timeout);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        let message = response.statusText;
+
+        if (errorText) {
+            try {
+                const errorData = JSON.parse(errorText);
+                message = errorData.error?.message || errorData.message || errorText;
+            } catch (parseError) {
+                message = errorText;
+            }
+        }
+
+        throw new Error(`${providerConfig.name} error: ${message}`);
+    }
+
+    const data = await response.json();
+    if (provider === 'anthropic') {
+        return data?.content?.find((block) => block.type === 'text')?.text || '';
+    }
+
+    return data?.choices?.[0]?.message?.content || '';
+}
+
 function buildPrompt() {
     const promptType = elements.llmPrompt.value;
     const text = state.rawText;
+    const voiceContext = state.metadata.voiceLinked
+        ? `\n\nVoice note context:\n${state.voiceDurationSeconds || estimateAudioDuration(state.voiceRecording)} second recording linked. Use it as additional creative context even though transcript is not available.`
+        : '';
 
     const prompts = {
         structure: `Extract and structure this text into JSON format with sections for: headings, paragraphs, links, and lists. Return ONLY valid JSON.
 
 Text:
-${text}`,
+${text}${voiceContext}`,
         markdown: `Convert this text into clean, well-formatted Markdown. Preserve structure and add appropriate formatting.
 
 Text:
-${text}`,
+${text}${voiceContext}`,
         caption: `Generate a 1-2 sentence Instagram caption based on this screenshot content. Be engaging and on-brand.
 
 Text:
-${text}`,
+${text}${voiceContext}`,
         ideas: `Generate 3 content ideas (blog post, social post, email) based on this screenshot. List each with a title and 1-line description.
 
 Text:
-${text}`,
+${text}${voiceContext}`,
         custom: elements.customPrompt.value || `Analyze this text:
-${text}`
+${text}${voiceContext}`
     };
 
     return prompts[promptType] || prompts.structure;
 }
 
-// Build Output JSON
+async function generateVariants() {
+    if (!state.llmOutput && !state.rawText) {
+        showStatus(elements.llmStatus, '✗ Generate JSON first', 'error');
+        return;
+    }
+
+    const { provider, apiKey } = ApiKeyManager.getActive();
+    if (!apiKey) {
+        showStatus(elements.llmStatus, '✗ No API key set. Add one in Settings.', 'error');
+        return;
+    }
+
+    const selectedVariants = {
+        instagram: elements.variantInstagram.checked,
+        tiktok: elements.variantTiktok.checked,
+        email: elements.variantEmail.checked,
+        linkedin: elements.variantLinkedin.checked,
+        ideas: elements.variantIdeas.checked,
+    };
+
+    const variantPrompts = {
+        instagram: 'Write a single Instagram caption (max 150 chars) for this content:',
+        tiktok: 'Write a TikTok caption (max 80 chars) for this content:',
+        email: 'Write an email subject line and one-line preview for this content:',
+        linkedin: 'Write a professional LinkedIn post (2-3 sentences) for this content:',
+        ideas: 'Generate 3 distinct content ideas from this information, each with a title and one-line description:'
+    };
+
+    const sourceText = state.llmOutput || state.rawText;
+    const variants = [];
+
+    elements.generateVariantsBtn.disabled = true;
+    showStatus(elements.llmStatus, 'Generating variants...', 'loading');
+
+    try {
+        for (const [type, isSelected] of Object.entries(selectedVariants)) {
+            if (!isSelected) continue;
+
+            const prompt = `${variantPrompts[type]}\n\n${sourceText}`;
+            const content = await requestLLM({
+                provider,
+                apiKey,
+                systemPrompt: 'You are a content creation expert.',
+                userPrompt: prompt,
+                temperature: 0.8,
+                maxTokens: 500,
+                timeout: CONFIG.variantTimeout
+            });
+
+            if (content) {
+                variants.push({ type, content });
+            }
+        }
+
+        state.variants = variants;
+        displayVariants(variants);
+        await buildOutput();
+        showStatus(elements.llmStatus, `✓ Generated ${variants.length} variants`, 'success');
+    } catch (error) {
+        setLastError(`Variant generation failed: ${error.message}`);
+        showStatus(elements.llmStatus, `✗ Variant generation failed: ${error.message}`, 'error');
+    } finally {
+        elements.generateVariantsBtn.disabled = false;
+    }
+}
+
+function displayVariants(variants) {
+    elements.variantsContainer.innerHTML = '';
+
+    variants.forEach((variant) => {
+        const card = document.createElement('div');
+        card.className = 'variant-card';
+
+        const heading = document.createElement('h4');
+        heading.textContent = formatVariantLabel(variant.type);
+
+        const body = document.createElement('p');
+        body.textContent = variant.content;
+
+        const copyButton = document.createElement('button');
+        copyButton.className = 'btn btn-secondary';
+        copyButton.textContent = '📋 Copy';
+        copyButton.addEventListener('click', () => {
+            copyText(variant.content, '✓ Variant copied!');
+        });
+
+        card.appendChild(heading);
+        card.appendChild(body);
+        card.appendChild(copyButton);
+        elements.variantsContainer.appendChild(card);
+    });
+
+    elements.variantsOutput.classList.toggle('hidden', variants.length === 0);
+}
+
+function formatVariantLabel(type) {
+    const labels = {
+        instagram: 'Instagram Caption',
+        tiktok: 'TikTok Caption',
+        email: 'Email Subject + Preview',
+        linkedin: 'LinkedIn Post',
+        ideas: 'Content Ideas'
+    };
+    return labels[type] || type;
+}
+
+function extractLeadEntries(text) {
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const phoneRegex = /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}/g;
+
+    const emails = [...new Set(text.match(emailRegex) || [])];
+    const phones = [...new Set((text.match(phoneRegex) || []).map((value) => value.trim()))];
+
+    return [
+        ...emails.map((value) => ({ type: 'email', value })),
+        ...phones.map((value) => ({ type: 'phone', value }))
+    ];
+}
+
+async function extractLeads() {
+    state.leads = extractLeadEntries(state.rawText);
+    elements.leadsContainer.innerHTML = '';
+
+    if (state.leads.length === 0) {
+        elements.leadsOutput.classList.add('hidden');
+        elements.leadsStatus.textContent = 'No emails or phone numbers found.';
+        await buildOutput();
+        return;
+    }
+
+    state.leads.forEach((lead) => {
+        const item = document.createElement('div');
+        item.className = 'lead-item';
+
+        const label = document.createElement('strong');
+        label.textContent = lead.type.toUpperCase();
+
+        const value = document.createElement('p');
+        value.textContent = lead.value;
+
+        const copyButton = document.createElement('button');
+        copyButton.className = 'btn btn-secondary';
+        copyButton.style.padding = '4px';
+        copyButton.style.fontSize = '12px';
+        copyButton.textContent = 'Copy';
+        copyButton.addEventListener('click', () => {
+            copyText(lead.value, '✓ Lead copied!');
+        });
+
+        item.appendChild(label);
+        item.appendChild(value);
+        item.appendChild(copyButton);
+        elements.leadsContainer.appendChild(item);
+    });
+
+    elements.leadsOutput.classList.remove('hidden');
+    elements.leadsStatus.textContent = `Found ${state.leads.length} contact(s)`;
+    await buildOutput();
+}
+
 async function buildOutput() {
     const { provider } = ApiKeyManager.getActive();
     const providerConfig = getProviderConfig(provider);
+    const emails = state.leads.filter((lead) => lead.type === 'email').map((lead) => lead.value);
+    const phones = state.leads.filter((lead) => lead.type === 'phone').map((lead) => lead.value);
     const output = {
-        id: `screenshot_${Date.now()}`,
+        id: state.currentRecord?.id || `screenshot_${Date.now()}`,
         timestamp: state.metadata.timestamp,
         source_type: 'screenshot_ocr',
         raw_text: state.rawText,
@@ -394,10 +752,21 @@ async function buildOutput() {
             prompt_type: elements.llmPrompt.value,
             llm_provider: provider,
             llm_model: providerConfig.model || null,
+            voice_linked: state.metadata.voiceLinked,
+            voice_duration: state.voiceRecording
+                ? `${state.voiceDurationSeconds || estimateAudioDuration(state.voiceRecording)} seconds`
+                : 'None'
         },
-        llm_ready: true,
-        approval_state: 'draft',
+        extracted_leads: {
+            emails,
+            phones,
+            lead_count: state.leads.length
+        },
+        generated_variants: state.variants,
+        approval_state: 'pending_review',
+        llm_ready: Boolean(state.rawText || state.llmOutput),
         linked_voice_id: null,
+        linked_post_ids: [],
     };
 
     state.currentRecord = output;
@@ -408,56 +777,79 @@ async function buildOutput() {
     await persistRecord(output);
 }
 
-// Download JSON
 function downloadJSON() {
     const json = elements.jsonOutput.value;
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `screenshot_${Date.now()}.json`;
+    link.download = `${state.currentRecord?.id || `screenshot_${Date.now()}`}.json`;
     link.click();
     URL.revokeObjectURL(url);
 }
 
-// Copy JSON
 async function copyJSON() {
+    await copyText(elements.jsonOutput.value, '✓ JSON copied to clipboard');
+}
+
+async function copyText(text, successMessage = '✓ Copied!') {
     try {
-        const json = elements.jsonOutput.value;
         if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(json);
+            await navigator.clipboard.writeText(text);
         } else {
-            elements.jsonOutput.select();
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            document.body.appendChild(helper);
+            helper.select();
             document.execCommand('copy');
+            document.body.removeChild(helper);
         }
-        showStatus(elements.llmStatus, '✓ JSON copied to clipboard', 'success');
+        showStatus(elements.llmStatus, successMessage, 'success');
     } catch (error) {
         setLastError(`Clipboard copy failed: ${error.message}`);
         showStatus(elements.llmStatus, `✗ Copy failed: ${error.message}`, 'error');
     }
 }
 
-// Reset App
 function resetApp() {
+    if (state.voiceDataUrl) {
+        URL.revokeObjectURL(state.voiceDataUrl);
+    }
+
     state = {
         screenshot: null,
         rawText: '',
         llmOutput: '',
+        voiceRecording: null,
+        voiceDataUrl: null,
+        voiceDurationSeconds: null,
+        variants: [],
+        leads: [],
         currentRecord: null,
         metadata: {
             timestamp: null,
             imageSize: null,
             ocrConfidence: null,
+            voiceLinked: false,
         }
     };
 
+    audioChunks = [];
     elements.screenshotInput.value = '';
     elements.imagePreview.classList.add('hidden');
     elements.imagePreview.removeAttribute('src');
+    elements.voicePlayback.removeAttribute('src');
+    elements.voicePreview.classList.add('hidden');
+    updateVoiceButtons(false);
     elements.rawText.value = '';
     elements.jsonOutput.value = '';
     elements.markdownOutput.value = '';
     elements.rawOutput.value = '';
+    elements.variantsContainer.innerHTML = '';
+    elements.variantsOutput.classList.add('hidden');
+    elements.leadsContainer.innerHTML = '';
+    elements.leadsOutput.classList.add('hidden');
+    elements.leadsStatus.textContent = '';
     elements.ocrStatus.classList.add('hidden');
     elements.llmStatus.classList.add('hidden');
     elements.customPrompt.value = '';
@@ -465,12 +857,13 @@ function resetApp() {
 
     elements.ocrBtn.disabled = true;
     elements.llmBtn.disabled = true;
+    elements.generateVariantsBtn.disabled = true;
+    elements.extractLeadsBtn.disabled = true;
     elements.downloadBtn.disabled = true;
     elements.copyBtn.disabled = true;
     clearLastError();
 }
 
-// Toggle Custom Prompt
 function toggleCustomPrompt() {
     if (elements.llmPrompt.value === 'custom') {
         elements.customPrompt.style.display = 'block';
@@ -479,7 +872,6 @@ function toggleCustomPrompt() {
     }
 }
 
-// Switch Tabs
 function switchTab(e) {
     const tab = e.target.dataset.tab;
 
@@ -508,7 +900,6 @@ async function checkLLMStatus() {
     }
 }
 
-// Update Tesseract Status
 function updateTesseractStatus() {
     if (window.Tesseract) {
         elements.tesseractStatusDebug.textContent = '✓ Ready';
@@ -530,7 +921,6 @@ function updateEndpointDebug(provider) {
     elements.endpointDebug.textContent = getProviderConfig(provider).apiUrl;
 }
 
-// Utility: Show Status Message
 function showStatus(element, message, type) {
     element.textContent = message;
     element.className = `status-message ${type}`;

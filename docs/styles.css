@@ -171,6 +171,10 @@ body {
     display: none;
 }
 
+.voice-preview.hidden {
+    display: none;
+}
+
 /* Status Messages */
 .status-message {
     padding: 12px;
@@ -269,6 +273,82 @@ body {
     color: var(--text-secondary);
     margin-top: 8px;
     line-height: 1.5;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.variants-output {
+    margin-top: 16px;
+}
+
+.variants-output.hidden {
+    display: none;
+}
+
+.variant-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.variant-card h4 {
+    color: var(--primary);
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.variant-card p {
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+}
+
+.variant-card button {
+    width: 100%;
+    padding: 6px;
+    font-size: 12px;
+}
+
+.leads-output {
+    margin-top: 12px;
+}
+
+.leads-output.hidden {
+    display: none;
+}
+
+.lead-item {
+    background: var(--bg);
+    border-left: 3px solid var(--primary);
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+}
+
+.lead-item strong {
+    color: var(--primary);
+}
+
+.lead-item p {
+    margin: 4px 0 8px;
+    font-size: 13px;
+    word-break: break-word;
 }
 
 /* Responsive */

@@ -2,7 +2,7 @@
 
 iPhone-first AI content studio PWA.
 
-Phone Studio V1 turns screenshots into structured content using on-device OCR plus a locally running LLM. The initial setup is done on Mac, then the repo can be maintained from iPhone with Git and iOS code editor apps.
+Phone Studio turns screenshots into structured content with OCR, multi-provider LLM processing, optional voice context, lead extraction, and variant generation. The initial setup is done on Mac, then the repo can be maintained from iPhone with Git and iOS code editor apps.
 
 ## Quick Start
 
@@ -37,9 +37,10 @@ For LLM testing:
 
 ## LLM Provider Setup
 
-Phone Studio V1.1 supports multiple LLM providers:
+Phone Studio supports multiple LLM providers:
 
-- **Groq** (Free, recommended): Get key at https://console.groq.com/keys
+- **Groq 70B** (Free, recommended): Get key at https://console.groq.com/keys
+- **Groq 8B Fast** (Free): Same Groq key, faster testing model
 - **Mistral** (Free): Get key at https://console.mistral.ai/api-keys
 - **DeepSeek**: Get key at https://platform.deepseek.com/api_keys
 - **OpenAI**: Get key at https://platform.openai.com/api-keys
@@ -49,6 +50,26 @@ Phone Studio V1.1 supports multiple LLM providers:
 In the PWA, go to Settings panel -> Select provider -> Paste API key -> Save.
 
 Your API keys are stored locally on your device and never sent to our servers.
+
+## V1.5 Features
+
+- Screenshot capture plus OCR extraction
+- Multi-LLM support (OpenAI, Groq, DeepSeek, Mistral, Anthropic, xAI)
+- Voice recording linking for screenshot context
+- Auto-generate content variants for Instagram, TikTok, email, LinkedIn, and idea generation
+- Lead extraction for emails and phone numbers
+- Approval workflow foundation with `pending_review` output state
+- JSON export with richer metadata
+
+### Testing With Groq
+
+Groq offers 60 free requests per minute:
+
+1. Get an API key: https://console.groq.com/keys
+2. In Phone Studio Settings, select `Groq 70B` or `Groq 8B`
+3. Paste the API key and save
+
+Use Groq for daily testing to keep costs down.
 
 ## GitHub Pages Deployment
 
@@ -108,9 +129,10 @@ phone-studio/
 - GitHub Pages-ready PWA shell
 
 ### V1.5
+- Voice recording linked to screenshot workflows
 - Auto-variant generation
 - Lead extraction
-- Basic scheduling
+- Basic scheduling and approval pipeline groundwork
 - Better offline caching and sync controls
 
 ### V2
