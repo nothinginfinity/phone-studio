@@ -1,5 +1,21 @@
 # Phone Studio Versions
 
+## V2.6 - Enhanced Semantic Search & Browse
+
+**Major Improvements:**
+- Full-featured semantic search interface
+- Filters for content type, confidence, and sort mode
+- Visual result cards with metadata and previews
+- Quick-search shortcuts from the library
+- JSON export for result sets
+- Modal detail view for indexed photos
+
+**User Experience:**
+- Search `finance` and find related photos instantly
+- Filter to `contract` and browse only contract-like records
+- See concepts, keywords, summaries, and previews without opening each record
+- Export matching result sets for downstream workflows
+
 ## V2.5 - Semantic Compression (Current)
 
 **New Features:**

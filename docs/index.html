@@ -261,19 +261,80 @@
                 </div>
 
                 <div class="batch-tab-content" id="searchTab">
-                    <div class="search-box">
-                        <input type="text" id="searchInput" class="select" placeholder="Search processed photos (e.g., 'credit', 'contract', 'email')...">
-                        <button id="searchBtn" class="btn btn-secondary">🔍 Search</button>
+                    <div class="search-container">
+                        <div class="search-header">
+                            <div class="search-input-wrapper">
+                                <input
+                                    type="text"
+                                    id="searchInput"
+                                    class="select search-main-input"
+                                    placeholder="Search: 'credit', 'contract', 'business'..."
+                                >
+                                <button id="searchBtn" class="btn btn-primary search-btn">
+                                    🔍 Search
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="search-filters">
+                            <div class="filter-group">
+                                <label class="filter-label" for="filterType">Content Type:</label>
+                                <select id="filterType" class="select select-small">
+                                    <option value="">All Types</option>
+                                    <option value="contract">Contract</option>
+                                    <option value="email">Email</option>
+                                    <option value="program">Program</option>
+                                    <option value="invoice">Invoice</option>
+                                    <option value="proposal">Proposal</option>
+                                    <option value="report">Report</option>
+                                    <option value="form">Form</option>
+                                    <option value="document">Document</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label" for="sortBy">Sort By:</label>
+                                <select id="sortBy" class="select select-small">
+                                    <option value="recent">Most Recent</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="relevance">Relevance</option>
+                                    <option value="type">Content Type</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
+                                <label class="filter-label" for="confidenceFilter">Confidence:</label>
+                                <input type="range" id="confidenceFilter" min="0" max="100" value="0" class="range-slider">
+                                <span id="confidenceValue">All</span>
+                            </div>
+                        </div>
+
+                        <div id="searchStats" class="search-stats hidden">
+                            <p>
+                                Found <strong id="resultCount">0</strong> photos
+                                <span id="searchTime"></span>
+                            </p>
+                        </div>
                     </div>
 
                     <div id="searchResults" class="search-results hidden">
-                        <p id="searchCount" class="help-text"></p>
-                        <div id="resultsContainer" class="results-container"></div>
+                        <div id="resultsContainer" class="results-grid"></div>
                     </div>
 
-                    <p id="searchEmpty" class="help-text" style="margin-top: 16px;">
-                        No searches yet. Process photos first, then search by keywords.
-                    </p>
+                    <div id="searchEmpty" class="search-empty">
+                        <p>📸 No searches yet</p>
+                        <p class="help-text">Process photos first, then search by keywords</p>
+                        <p class="help-text">Try: "credit", "business", "contract", "finance"</p>
+                    </div>
+
+                    <div id="quickActions" class="quick-actions hidden">
+                        <button id="exportResultsBtn" class="btn btn-secondary">
+                            📥 Export Results as JSON
+                        </button>
+                        <button id="clearSearchBtn" class="btn btn-outline">
+                            ✕ Clear Search
+                        </button>
+                    </div>
                 </div>
 
                 <div class="batch-tab-content" id="libraryTab">
@@ -283,13 +344,64 @@
                         <p><strong>Last Updated:</strong> <span id="lastUpdated">Never</span></p>
                     </div>
 
-                    <button id="clearIndexBtn" class="btn btn-outline" style="margin-top: 12px;">
+                    <div class="library-quick-search">
+                        <p class="help-text" style="margin-bottom: 12px;">Quick Search Suggestions:</p>
+                        <div class="quick-search-grid">
+                            <button class="btn btn-secondary btn-small quick-search-btn" data-term="business">
+                                🏢 Business
+                            </button>
+                            <button class="btn btn-secondary btn-small quick-search-btn" data-term="finance">
+                                💰 Finance
+                            </button>
+                            <button class="btn btn-secondary btn-small quick-search-btn" data-term="contract">
+                                📝 Contract
+                            </button>
+                            <button class="btn btn-secondary btn-small quick-search-btn" data-term="email">
+                                ✉️ Email
+                            </button>
+                        </div>
+                    </div>
+
+                    <button id="clearIndexBtn" class="btn btn-outline" style="margin-top: 16px; width: 100%;">
                         🗑️ Clear All Indexed Photos
                     </button>
 
                     <div id="libraryList" class="library-list hidden">
-                        <p class="help-text">Recently processed:</p>
+                        <p class="help-text" style="margin-top: 16px; margin-bottom: 12px;">Recently processed:</p>
                         <div id="libraryItems"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="resultModal" class="result-modal hidden">
+                <div class="result-modal-content">
+                    <div class="result-modal-header">
+                        <h3 id="modalTitle">Photo Details</h3>
+                        <button id="closeResultModalBtn" class="result-modal-close" aria-label="Close">
+                            ×
+                        </button>
+                    </div>
+                    <div class="result-modal-body">
+                        <div class="modal-section">
+                            <h4>Summary</h4>
+                            <p id="modalSummary">—</p>
+                        </div>
+                        <div class="modal-section">
+                            <h4>Metadata</h4>
+                            <p id="modalMetadata">—</p>
+                        </div>
+                        <div class="modal-section">
+                            <h4>OCR Text</h4>
+                            <div id="modalRawText" class="modal-full-text">—</div>
+                        </div>
+                        <div class="modal-section">
+                            <h4>LLM Output</h4>
+                            <div id="modalLlmOutput" class="modal-full-text">—</div>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="modalCopyJsonBtn" class="btn btn-secondary">📋 Copy JSON</button>
+                        <button id="modalCloseBtn" class="btn btn-outline">Close</button>
                     </div>
                 </div>
             </section>

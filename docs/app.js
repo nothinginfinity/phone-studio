@@ -152,6 +152,82 @@ let batchState = {
     results: []
 };
 
+let currentSearchResults = [];
+
+const SemanticSearch = {
+    async search(query, filters = {}) {
+        const startTime = performance.now();
+        const all = await BatchDB.getAll();
+
+        if (all.length === 0) {
+            return { results: [], total: 0, count: 0, time: 0, query };
+        }
+
+        const results = this.filterAndRank(all, query, filters);
+        const endTime = performance.now();
+
+        return {
+            results,
+            total: all.length,
+            count: results.length,
+            time: (endTime - startTime).toFixed(0),
+            query
+        };
+    },
+
+    filterAndRank(photos, query, filters) {
+        let results = [...photos];
+
+        if (filters.type) {
+            results = results.filter((photo) => photo.compressed_index?.type === filters.type);
+        }
+
+        if (filters.confidence > 0) {
+            results = results.filter((photo) =>
+                ((photo.compressed_index?.confidence || 0) * 100) >= filters.confidence
+            );
+        }
+
+        if (query && query.trim()) {
+            results = results
+                .map((photo) => ({
+                    ...photo,
+                    relevanceScore: this.calculateRelevance(photo, query)
+                }))
+                .filter((photo) => photo.relevanceScore > 0);
+
+            if (filters.sortBy === 'relevance' || !filters.sortBy || filters.sortBy === 'recent') {
+                results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+            }
+        }
+
+        if (filters.sortBy === 'recent') {
+            results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        } else if (filters.sortBy === 'oldest') {
+            results.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        } else if (filters.sortBy === 'type') {
+            results.sort((a, b) => (a.compressed_index?.type || '').localeCompare(b.compressed_index?.type || ''));
+        }
+
+        return results;
+    },
+
+    calculateRelevance(photo, query) {
+        const queryLower = query.toLowerCase();
+        const compressed = photo.compressed_index || {};
+        let score = 0;
+
+        if (compressed.summary?.toLowerCase().includes(queryLower)) score += 50;
+        if (compressed.concepts?.some((concept) => concept.toLowerCase().includes(queryLower))) score += 30;
+        if (compressed.keywords?.some((keyword) => keyword.toLowerCase().includes(queryLower))) score += 20;
+        if (compressed.entities?.some((entity) => entity.toLowerCase().includes(queryLower))) score += 15;
+        if (photo.raw_text?.toLowerCase().includes(queryLower)) score += 10;
+        if (photo.llm_output?.toLowerCase().includes(queryLower)) score += 10;
+
+        return score;
+    }
+};
+
 function getProviderConfig(provider) {
     return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
 }
@@ -432,16 +508,36 @@ const elements = {
     batchTabContents: document.querySelectorAll('.batch-tab-content'),
     searchInput: document.getElementById('searchInput'),
     searchBtn: document.getElementById('searchBtn'),
+    filterType: document.getElementById('filterType'),
+    sortBy: document.getElementById('sortBy'),
+    confidenceFilter: document.getElementById('confidenceFilter'),
+    confidenceValue: document.getElementById('confidenceValue'),
+    searchStats: document.getElementById('searchStats'),
+    resultCount: document.getElementById('resultCount'),
+    searchTime: document.getElementById('searchTime'),
     searchResults: document.getElementById('searchResults'),
     searchCount: document.getElementById('searchCount'),
     resultsContainer: document.getElementById('resultsContainer'),
     searchEmpty: document.getElementById('searchEmpty'),
+    quickActions: document.getElementById('quickActions'),
+    exportResultsBtn: document.getElementById('exportResultsBtn'),
+    clearSearchBtn: document.getElementById('clearSearchBtn'),
     clearIndexBtn: document.getElementById('clearIndexBtn'),
     libraryCount: document.getElementById('libraryCount'),
     indexSize: document.getElementById('indexSize'),
     lastUpdated: document.getElementById('lastUpdated'),
     libraryList: document.getElementById('libraryList'),
     libraryItems: document.getElementById('libraryItems'),
+    quickSearchBtns: document.querySelectorAll('.quick-search-btn'),
+    resultModal: document.getElementById('resultModal'),
+    modalTitle: document.getElementById('modalTitle'),
+    modalSummary: document.getElementById('modalSummary'),
+    modalMetadata: document.getElementById('modalMetadata'),
+    modalRawText: document.getElementById('modalRawText'),
+    modalLlmOutput: document.getElementById('modalLlmOutput'),
+    modalCopyJsonBtn: document.getElementById('modalCopyJsonBtn'),
+    modalCloseBtn: document.getElementById('modalCloseBtn'),
+    closeResultModalBtn: document.getElementById('closeResultModalBtn'),
     variantInstagram: document.getElementById('variantInstagram'),
     variantTiktok: document.getElementById('variantTiktok'),
     variantEmail: document.getElementById('variantEmail'),
@@ -540,13 +636,39 @@ function initEventListeners() {
         });
     });
 
-    elements.searchBtn.addEventListener('click', () => {
-        searchPhotos(elements.searchInput.value);
-    });
-
-    elements.searchInput.addEventListener('keydown', (e) => {
+    elements.searchBtn.addEventListener('click', performSearch);
+    elements.searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
-            searchPhotos(elements.searchInput.value);
+            performSearch();
+        }
+    });
+    elements.filterType.addEventListener('change', performSearch);
+    elements.sortBy.addEventListener('change', performSearch);
+    elements.confidenceFilter.addEventListener('input', (e) => {
+        const value = e.target.value;
+        elements.confidenceValue.textContent = value === '0' ? 'All' : `${value}%+`;
+        performSearch();
+    });
+    elements.exportResultsBtn.addEventListener('click', exportSearchResults);
+    elements.clearSearchBtn.addEventListener('click', clearSearch);
+    elements.quickSearchBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            quickSearch(btn.dataset.term);
+        });
+    });
+    elements.modalCloseBtn.addEventListener('click', closeResultModal);
+    elements.closeResultModalBtn.addEventListener('click', closeResultModal);
+    elements.modalCopyJsonBtn.addEventListener('click', async () => {
+        const activeId = elements.resultModal.dataset.photoId;
+        if (!activeId) return;
+        const photo = currentSearchResults.find((item) => item.id === activeId);
+        if (photo) {
+            await copyText(JSON.stringify(photo, null, 2), '✓ Photo JSON copied');
+        }
+    });
+    elements.resultModal.addEventListener('click', (e) => {
+        if (e.target === elements.resultModal) {
+            closeResultModal();
         }
     });
 
@@ -555,6 +677,7 @@ function initEventListeners() {
             await BatchDB.clear();
             await updateLibraryDisplay();
             showStatus(elements.batchStatus, '✓ Index cleared', 'success');
+            showSearchEmpty();
         }
     });
 
@@ -736,55 +859,196 @@ function showBatchProgress(show) {
     elements.batchProgress.classList.toggle('hidden', !show);
 }
 
-async function searchPhotos(query) {
-    if (!query.trim()) {
-        elements.searchResults.classList.add('hidden');
-        elements.searchEmpty.style.display = 'block';
+async function performSearch() {
+    const query = elements.searchInput.value;
+    const filters = {
+        type: elements.filterType.value,
+        sortBy: elements.sortBy.value,
+        confidence: parseInt(elements.confidenceFilter.value, 10)
+    };
+
+    if (!query.trim() && !filters.type) {
+        showSearchEmpty();
         return;
     }
 
-    const results = await BatchDB.search(query);
-    elements.resultsContainer.innerHTML = '';
-
-    if (results.length === 0) {
-        elements.searchCount.textContent = 'No results found';
-        elements.searchResults.classList.add('hidden');
-        elements.searchEmpty.style.display = 'block';
-        return;
-    }
-
-    results.forEach((result) => {
-        const card = document.createElement('div');
-        card.className = 'result-card';
-
-        const preview = (result.raw_text || '').substring(0, 150).replace(/\n/g, ' ');
-        const keywords = (result.photo_keywords || result.keywords || []).join(', ') || 'N/A';
-
-        card.innerHTML = `
-            <h4>${result.file_name}</h4>
-            <p><strong>Keywords:</strong> ${keywords}</p>
-            <p><strong>Date:</strong> ${new Date(result.timestamp).toLocaleDateString()}</p>
-            <div class="result-preview">${preview}...</div>
-        `;
-
-        card.addEventListener('click', () => showPhotoDetail(result));
-        elements.resultsContainer.appendChild(card);
-    });
-
-    elements.searchCount.textContent = `Found ${results.length} result(s)`;
-    elements.searchResults.classList.remove('hidden');
-    elements.searchEmpty.style.display = 'none';
+    const results = await SemanticSearch.search(query, filters);
+    displaySearchResults(results);
 }
 
-function showPhotoDetail(photo) {
-    alert(`Photo: ${photo.file_name}\n\nKeywords: ${(photo.photo_keywords || photo.keywords || []).join(', ')}\n\nPreview:\n${(photo.raw_text || '').substring(0, 200)}...`);
+function displaySearchResults(results) {
+    currentSearchResults = results.results;
+    elements.searchEmpty.classList.add('hidden');
+    elements.searchStats.classList.remove('hidden');
+    elements.searchResults.classList.remove('hidden');
+    elements.quickActions.classList.remove('hidden');
+    elements.resultCount.textContent = String(results.count);
+    elements.searchTime.textContent = `(${results.time}ms)`;
+    elements.resultsContainer.innerHTML = '';
+
+    if (results.count === 0) {
+        elements.resultsContainer.innerHTML = '<p class="help-text">No results found. Try different keywords.</p>';
+        return;
+    }
+
+    results.results.forEach((photo, index) => {
+        const card = createResultCard(photo, index);
+        elements.resultsContainer.appendChild(card);
+    });
+}
+
+function createResultCard(photo, index) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+
+    const compressed = photo.compressed_index || {};
+    const preview = (photo.raw_text || '').substring(0, 150).replace(/\n/g, ' ');
+    const timestamp = new Date(photo.timestamp).toLocaleDateString();
+    const summary = compressed.summary || 'N/A';
+
+    const conceptsHtml = (compressed.concepts || [])
+        .slice(0, 3)
+        .map((concept) => `<span class="concept-tag">${escapeHtml(concept)}</span>`)
+        .join('');
+
+    const keywordsHtml = (compressed.keywords || [])
+        .slice(0, 4)
+        .map((keyword) => `<span class="keyword-tag">${escapeHtml(keyword)}</span>`)
+        .join('');
+
+    card.innerHTML = `
+        <div class="result-header">
+            <div class="result-title">
+                <span class="result-type-badge">${escapeHtml(compressed.type || 'DOC')}</span>
+                <h4>${escapeHtml(photo.file_name || `Photo ${index + 1}`)}</h4>
+            </div>
+            <span class="result-date">${timestamp}</span>
+            <div class="result-actions">
+                <button class="btn btn-secondary result-view-btn" data-photo-id="${photo.id}">View</button>
+                <button class="btn btn-secondary result-copy-btn" data-photo-id="${photo.id}">Copy</button>
+            </div>
+        </div>
+        <div class="result-content">
+            <p><strong>Summary:</strong> ${escapeHtml(summary)}</p>
+            ${conceptsHtml ? `<div class="result-concepts">${conceptsHtml}</div>` : ''}
+            ${keywordsHtml ? `<div class="result-keywords">${keywordsHtml}</div>` : ''}
+            <div class="result-preview">${escapeHtml(preview)}...</div>
+        </div>
+    `;
+
+    card.querySelector('.result-view-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewPhotoDetail(photo.id);
+    });
+
+    card.querySelector('.result-copy-btn').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await copyPhotoJson(photo.id);
+    });
+
+    card.addEventListener('click', () => {
+        viewPhotoDetail(photo.id);
+    });
+
+    return card;
+}
+
+function showSearchEmpty() {
+    currentSearchResults = [];
+    elements.searchEmpty.classList.remove('hidden');
+    elements.searchStats.classList.add('hidden');
+    elements.searchResults.classList.add('hidden');
+    elements.quickActions.classList.add('hidden');
+    elements.resultsContainer.innerHTML = '';
 }
 
 async function viewPhotoDetail(id) {
-    const photo = await BatchDB.getById(id);
-    if (photo) {
-        showPhotoDetail(photo);
+    let photo = currentSearchResults.find((item) => item.id === id);
+    if (!photo) {
+        photo = await BatchDB.getById(id);
     }
+    if (!photo) return;
+
+    const compressed = photo.compressed_index || {};
+    elements.resultModal.dataset.photoId = photo.id;
+    elements.modalTitle.textContent = photo.file_name || 'Photo Details';
+    elements.modalSummary.textContent = compressed.summary || 'No semantic summary available.';
+    elements.modalMetadata.textContent = `Type: ${compressed.type || 'document'} | Concepts: ${(compressed.concepts || []).join(', ') || 'None'} | Keywords: ${(compressed.keywords || []).join(', ') || 'None'}`;
+    elements.modalRawText.textContent = photo.raw_text || 'No OCR text stored.';
+    elements.modalLlmOutput.textContent = photo.llm_output || 'No LLM output stored.';
+    elements.resultModal.classList.remove('hidden');
+}
+
+function closeResultModal() {
+    elements.resultModal.classList.add('hidden');
+    delete elements.resultModal.dataset.photoId;
+}
+
+async function copyPhotoJson(id) {
+    let photo = currentSearchResults.find((item) => item.id === id);
+    if (!photo) {
+        photo = await BatchDB.getById(id);
+    }
+    if (photo) {
+        await copyText(JSON.stringify(photo, null, 2), '✓ Photo JSON copied');
+    }
+}
+
+async function exportSearchResults() {
+    const query = elements.searchInput.value;
+    const filters = {
+        type: elements.filterType.value,
+        sortBy: elements.sortBy.value,
+        confidence: parseInt(elements.confidenceFilter.value, 10)
+    };
+
+    const results = await SemanticSearch.search(query, filters);
+    const exportData = {
+        export_date: new Date().toISOString(),
+        query,
+        filters,
+        total_results: results.count,
+        photos: results.results.map((photo) => ({
+            id: photo.id,
+            file_name: photo.file_name,
+            timestamp: photo.timestamp,
+            compressed_index: photo.compressed_index,
+            raw_text: photo.raw_text,
+            llm_output: photo.llm_output
+        }))
+    };
+
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `phone-studio-export-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showStatus(elements.batchStatus, '✓ Results exported as JSON', 'success');
+}
+
+function clearSearch() {
+    elements.searchInput.value = '';
+    elements.filterType.value = '';
+    elements.sortBy.value = 'recent';
+    elements.confidenceFilter.value = '0';
+    elements.confidenceValue.textContent = 'All';
+    showSearchEmpty();
+}
+
+function quickSearch(term) {
+    switchBatchTab('search');
+    elements.searchInput.value = term;
+    performSearch();
+
+    setTimeout(() => {
+        elements.searchResults.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
 }
 
 function switchBatchTab(tabName) {
@@ -843,6 +1107,15 @@ async function updateLibraryDisplay() {
     } catch (error) {
         console.error('Library display failed:', error);
     }
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function setBatchImageSize(photoData, dataUrl) {

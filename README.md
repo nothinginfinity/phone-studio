@@ -130,6 +130,46 @@ Each photo becomes a self-contained knowledge unit:
 
 All data stays local on the device. No backend required.
 
+## V2.6 - Enhanced Semantic Search & Browse
+
+### Search Features
+
+**Full-Text Search:**
+- Search by keywords such as `credit`, `contract`, or `business`
+- Searches across concepts, keywords, entities, raw text, and summaries
+- Relevance scoring for ranked results
+
+**Filtering:**
+- Filter by content type
+- Filter by confidence level
+- Sort by recent, oldest, relevance, or type
+
+**Results Display:**
+- Visual result cards with metadata
+- Summary, concepts, keywords, and preview text
+- Quick actions for viewing details and copying JSON
+
+**Export:**
+- Export matching results as JSON
+- Includes compressed index plus OCR and LLM content
+
+### Usage
+
+1. Go to the `Search Index` tab
+2. Type a search term such as `credit`, `business`, or `contract`
+3. Optionally filter by type or confidence
+4. Review the result cards
+5. Open `View` for full details or `Copy` for JSON
+6. Use `Export Results` to download the current result set
+
+### Quick Search
+
+Use shortcuts in the Library tab:
+- `Business`
+- `Finance`
+- `Contract`
+- `Email`
+
 ## GitHub Pages Deployment
 
 1. Create a public GitHub repository named `phone-studio`.
