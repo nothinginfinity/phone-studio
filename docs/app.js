@@ -6,7 +6,7 @@ const LLM_PROVIDERS = {
     groq: {
         name: 'Groq',
         apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
-        model: 'mixtral-8x7b-32768',
+        model: 'llama-3.1-70b-versatile',
         free: true,
         instructions: 'Get free API key at: https://console.groq.com/keys'
     },
