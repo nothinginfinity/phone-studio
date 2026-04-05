@@ -1,5 +1,20 @@
 # Phone Studio Versions
 
+## V3.1 - Voice Memo Import & Search
+
+**New Features:**
+- Voice memo import tab
+- Voice memo IndexedDB store
+- Transcript summarization and key-point extraction
+- Unified search across photos and memos
+- Audio playback inside the detail modal
+
+**Workflow:**
+1. Import memo files
+2. Paste the transcript text
+3. Summarize and index
+4. Search alongside photos in one interface
+
 ## V2.6 - Enhanced Semantic Search & Browse
 
 **Major Improvements:**

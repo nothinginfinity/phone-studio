@@ -170,6 +170,35 @@ Use shortcuts in the Library tab:
 - `Contract`
 - `Email`
 
+## V3.1 - Voice Memo Import & Search
+
+### Features
+
+**Voice Memo Import:**
+- Import multiple memo files from device storage
+- Paste iOS Voice Memos transcripts during processing
+- Optional LLM summarization
+- Key-point extraction
+- Semantic indexing for each memo
+
+**Voice Memo Search:**
+- Search transcripts, summaries, key points, and semantic keywords
+- Browse memo results in the same search interface as photos
+- Play memo audio while reading transcript and summary
+
+**Unified Search:**
+- Search photos and voice memos together
+- Result cards show source, summary, and preview
+- Detail modal supports both image-derived notes and audio memos
+
+### Usage
+
+1. Go to the `Voice Memos` tab.
+2. Select one or more memo files.
+3. Paste the transcript for each memo when prompted.
+4. Let Phone Studio summarize and index them.
+5. Search from the `Search Index` tab to find both photos and memos together.
+
 ## GitHub Pages Deployment
 
 1. Create a public GitHub repository named `phone-studio`.

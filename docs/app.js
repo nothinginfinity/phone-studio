@@ -62,6 +62,9 @@ const CONFIG = {
     STORE_NAME: 'screenshots',
 };
 
+const BATCH_DB_NAME = 'PhoneStudioBatch';
+const BATCH_DB_VERSION = 2;
+
 const ApiKeyManager = {
     save: (provider, apiKey) => {
         localStorage.setItem(`llm_api_key_${provider}`, apiKey);
@@ -82,22 +85,26 @@ const ApiKeyManager = {
 };
 
 const BatchDB = {
-    dbName: 'PhoneStudioBatch',
+    dbName: BATCH_DB_NAME,
     storeName: 'processed_photos',
     indexStoreName: 'search_index',
+    voiceStoreName: 'voice_memos',
 
     async init() {
         if (!window.idb?.openDB) {
             throw new Error('IndexedDB helper failed to load.');
         }
 
-        return window.idb.openDB(this.dbName, 1, {
+        return window.idb.openDB(this.dbName, BATCH_DB_VERSION, {
             upgrade(db) {
                 if (!db.objectStoreNames.contains('processed_photos')) {
                     db.createObjectStore('processed_photos', { keyPath: 'id' });
                 }
                 if (!db.objectStoreNames.contains('search_index')) {
                     db.createObjectStore('search_index', { keyPath: 'keyword' });
+                }
+                if (!db.objectStoreNames.contains('voice_memos')) {
+                    db.createObjectStore('voice_memos', { keyPath: 'id' });
                 }
             }
         });
@@ -153,6 +160,159 @@ let batchState = {
 };
 
 let currentSearchResults = [];
+let voiceState = {
+    queue: [],
+    currentIndex: 0,
+    isProcessing: false,
+    results: []
+};
+
+const VoiceMemoProcessor = {
+    async processVoiceMemo(file, transcript, options) {
+        try {
+            const memoData = {
+                id: `memo_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+                timestamp: new Date().toISOString(),
+                file_name: file.name,
+                file_size: file.size,
+                duration_seconds: await this.getAudioDuration(file),
+                audio_data: null,
+                raw_transcript: transcript || '',
+                summary: '',
+                key_points: [],
+                compressed_index: null,
+                metadata: {
+                    format: file.type,
+                    processed_at: new Date().toISOString()
+                }
+            };
+
+            await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    memoData.audio_data = e.target.result;
+                    resolve();
+                };
+                reader.readAsDataURL(file);
+            });
+
+            if (transcript && options.summarize) {
+                const { summary, keyPoints } = await this.summarizeTranscript(transcript);
+                memoData.summary = summary;
+                memoData.key_points = options.extractKeypoints ? keyPoints : [];
+            } else {
+                memoData.summary = transcript.substring(0, 200);
+            }
+
+            memoData.compressed_index = await SemanticCompressor.compress(
+                transcript,
+                memoData.summary
+            );
+
+            return memoData;
+        } catch (error) {
+            console.error('Voice memo processing error:', error);
+            return null;
+        }
+    },
+
+    async getAudioDuration(file) {
+        return new Promise((resolve) => {
+            const audio = new Audio();
+            const objectUrl = URL.createObjectURL(file);
+
+            audio.addEventListener('loadedmetadata', () => {
+                resolve(Math.round(audio.duration));
+                URL.revokeObjectURL(objectUrl);
+            });
+
+            audio.addEventListener('error', () => {
+                URL.revokeObjectURL(objectUrl);
+                resolve(0);
+            });
+
+            audio.src = objectUrl;
+        });
+    },
+
+    async summarizeTranscript(transcript) {
+        const { provider, apiKey } = ApiKeyManager.getActive();
+
+        if (!apiKey) {
+            return {
+                summary: transcript.substring(0, 200),
+                keyPoints: []
+            };
+        }
+
+        try {
+            const prompt = `Analyze this voice memo transcript and provide:
+1. A concise 1-2 sentence summary
+2. 3-5 key points or action items
+
+Transcript:
+${transcript}`;
+
+            const content = await requestLLM({
+                provider,
+                apiKey,
+                systemPrompt: 'You are a professional note-taker. Extract key insights from voice transcripts.',
+                userPrompt: prompt,
+                temperature: 0.7,
+                maxTokens: 500,
+                timeout: CONFIG.timeout
+            });
+
+            const lines = content.split('\n');
+            const summary = lines
+                .filter((line) => line.trim().length > 0)
+                .slice(0, 2)
+                .join(' ')
+                .substring(0, 200);
+
+            const keyPoints = lines
+                .filter((line) => line.includes('-') || line.includes('•') || line.includes('*'))
+                .slice(0, 5)
+                .map((line) => line.replace(/^[-•*\s]+/, '').trim());
+
+            return { summary, keyPoints };
+        } catch (error) {
+            console.error('Summarization error:', error);
+            return {
+                summary: transcript.substring(0, 200),
+                keyPoints: []
+            };
+        }
+    }
+};
+
+const VoiceMemoDB = {
+    storeName: BatchDB.voiceStoreName,
+
+    async init() {
+        return BatchDB.init();
+    },
+
+    async saveMemo(memoData) {
+        const db = await this.init();
+        await db.put(this.storeName, memoData);
+    },
+
+    async getAll() {
+        const db = await this.init();
+        return db.getAll(this.storeName);
+    },
+
+    async getById(id) {
+        const db = await this.init();
+        return db.get(this.storeName, id);
+    },
+
+    async clear() {
+        const db = await this.init();
+        await db.clear(this.storeName);
+    }
+};
 
 const SemanticSearch = {
     async search(query, filters = {}) {
@@ -224,6 +384,76 @@ const SemanticSearch = {
         if (photo.raw_text?.toLowerCase().includes(queryLower)) score += 10;
         if (photo.llm_output?.toLowerCase().includes(queryLower)) score += 10;
 
+        return score;
+    }
+};
+
+const UnifiedSearch = {
+    async search(query, filters = {}) {
+        const startTime = performance.now();
+        const photoResults = filters.type === 'memo'
+            ? { results: [], total: 0 }
+            : await SemanticSearch.search(query, filters);
+
+        let memoResults = [];
+        if (!filters.type || filters.type === 'memo') {
+            const allMemos = await VoiceMemoDB.getAll();
+            memoResults = this.filterMemos(allMemos, query, filters);
+        }
+
+        const combined = [
+            ...photoResults.results.map((result) => ({ ...result, source: 'photo' })),
+            ...memoResults.map((result) => ({ ...result, source: 'memo' }))
+        ];
+
+        if (filters.sortBy === 'recent') {
+            combined.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        } else if (filters.sortBy === 'oldest') {
+            combined.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        } else if (filters.sortBy === 'type') {
+            combined.sort((a, b) => (a.compressed_index?.type || a.source || '').localeCompare(b.compressed_index?.type || b.source || ''));
+        } else {
+            combined.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+        }
+
+        const endTime = performance.now();
+        return {
+            results: combined,
+            photos: photoResults.results.length,
+            memos: memoResults.length,
+            total: photoResults.total + memoResults.length,
+            count: combined.length,
+            time: (endTime - startTime).toFixed(0),
+            query
+        };
+    },
+
+    filterMemos(memos, query, filters = {}) {
+        let results = [...memos];
+        if (filters.confidence > 0) {
+            results = results.filter((memo) => ((memo.compressed_index?.confidence || 0) * 100) >= filters.confidence);
+        }
+
+        if (!query.trim()) {
+            return results;
+        }
+
+        const queryLower = query.toLowerCase();
+        return results
+            .map((memo) => ({
+                ...memo,
+                relevanceScore: this.calculateMemoRelevance(memo, queryLower)
+            }))
+            .filter((memo) => memo.relevanceScore > 0)
+            .sort((a, b) => b.relevanceScore - a.relevanceScore);
+    },
+
+    calculateMemoRelevance(memo, queryLower) {
+        let score = 0;
+        if (memo.summary?.toLowerCase().includes(queryLower)) score += 50;
+        if (memo.key_points?.some((point) => point.toLowerCase().includes(queryLower))) score += 30;
+        if (memo.raw_transcript?.toLowerCase().includes(queryLower)) score += 10;
+        if (memo.compressed_index?.keywords?.some((keyword) => keyword.toLowerCase().includes(queryLower))) score += 20;
         return score;
     }
 };
@@ -529,10 +759,30 @@ const elements = {
     libraryList: document.getElementById('libraryList'),
     libraryItems: document.getElementById('libraryItems'),
     quickSearchBtns: document.querySelectorAll('.quick-search-btn'),
+    voiceMemoInput: document.getElementById('voiceMemoInput'),
+    selectVoiceMemosBtn: document.getElementById('selectVoiceMemosBtn'),
+    voiceMemoCountDisplay: document.getElementById('voiceMemoCountDisplay'),
+    voiceSummarize: document.getElementById('voiceSummarize'),
+    voiceExtractKeypoints: document.getElementById('voiceExtractKeypoints'),
+    startVoiceProcessBtn: document.getElementById('startVoiceProcessBtn'),
+    voiceProgress: document.getElementById('voiceProgress'),
+    voiceProgressText: document.getElementById('voiceProgressText'),
+    voiceProgressPercent: document.getElementById('voiceProgressPercent'),
+    voiceProgressFill: document.getElementById('voiceProgressFill'),
+    currentVoiceStatus: document.getElementById('currentVoiceStatus'),
+    voiceStatus: document.getElementById('voiceStatus'),
+    voiceMemoCount: document.getElementById('voiceMemoCount'),
+    voiceMemoTotalDuration: document.getElementById('voiceMemoTotalDuration'),
+    voiceMemoLastUpdated: document.getElementById('voiceMemoLastUpdated'),
+    clearVoiceIndexBtn: document.getElementById('clearVoiceIndexBtn'),
+    voiceMemoList: document.getElementById('voiceMemoList'),
+    voiceMemoItems: document.getElementById('voiceMemoItems'),
     resultModal: document.getElementById('resultModal'),
     modalTitle: document.getElementById('modalTitle'),
     modalSummary: document.getElementById('modalSummary'),
     modalMetadata: document.getElementById('modalMetadata'),
+    modalAudioSection: document.getElementById('modalAudioSection'),
+    modalAudioPlayer: document.getElementById('modalAudioPlayer'),
     modalRawText: document.getElementById('modalRawText'),
     modalLlmOutput: document.getElementById('modalLlmOutput'),
     modalCopyJsonBtn: document.getElementById('modalCopyJsonBtn'),
@@ -560,6 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkLLMStatus();
     updateTesseractStatus();
     updateLibraryDisplay();
+    updateVoiceLibraryDisplay();
 });
 
 function initEventListeners() {
@@ -656,14 +907,37 @@ function initEventListeners() {
             quickSearch(btn.dataset.term);
         });
     });
+    elements.selectVoiceMemosBtn.addEventListener('click', () => {
+        elements.voiceMemoInput.click();
+    });
+    elements.voiceMemoInput.addEventListener('change', (e) => {
+        const count = e.target.files.length;
+        elements.voiceMemoCountDisplay.textContent = count > 0 ? `${count} memo(s) selected` : '';
+        elements.startVoiceProcessBtn.disabled = count === 0;
+    });
+    elements.startVoiceProcessBtn.addEventListener('click', () => {
+        const files = elements.voiceMemoInput.files;
+        const options = {
+            summarize: elements.voiceSummarize.checked,
+            extractKeypoints: elements.voiceExtractKeypoints.checked
+        };
+        processVoiceMemos(files, options);
+    });
+    elements.clearVoiceIndexBtn.addEventListener('click', async () => {
+        if (confirm('Clear all voice memos? This cannot be undone.')) {
+            await VoiceMemoDB.clear();
+            await updateVoiceLibraryDisplay();
+            showStatus(elements.voiceStatus, '✓ Voice index cleared', 'success');
+        }
+    });
     elements.modalCloseBtn.addEventListener('click', closeResultModal);
     elements.closeResultModalBtn.addEventListener('click', closeResultModal);
     elements.modalCopyJsonBtn.addEventListener('click', async () => {
-        const activeId = elements.resultModal.dataset.photoId;
+        const activeId = elements.resultModal.dataset.photoId || elements.resultModal.dataset.memoId;
         if (!activeId) return;
         const photo = currentSearchResults.find((item) => item.id === activeId);
         if (photo) {
-            await copyText(JSON.stringify(photo, null, 2), '✓ Photo JSON copied');
+            await copyText(JSON.stringify(photo, null, 2), '✓ Result JSON copied');
         }
     });
     elements.resultModal.addEventListener('click', (e) => {
@@ -717,6 +991,123 @@ async function processBatchPhotos(files, options) {
     );
 
     await updateLibraryDisplay();
+}
+
+async function processVoiceMemos(files, options) {
+    if (!files || files.length === 0) {
+        showStatus(elements.voiceStatus, '✗ No memos selected', 'error');
+        return;
+    }
+
+    voiceState.queue = Array.from(files);
+    voiceState.currentIndex = 0;
+    voiceState.isProcessing = true;
+    voiceState.results = [];
+    elements.voiceProgress.classList.remove('hidden');
+    elements.voiceStatus.classList.add('hidden');
+
+    for (let i = 0; i < voiceState.queue.length; i += 1) {
+        if (!voiceState.isProcessing) break;
+
+        voiceState.currentIndex = i;
+        await processOneVoiceMemo(voiceState.queue[i], options, i, voiceState.queue.length);
+        updateVoiceProgressUI(i + 1, voiceState.queue.length);
+    }
+
+    voiceState.isProcessing = false;
+    elements.voiceProgress.classList.add('hidden');
+    showStatus(
+        elements.voiceStatus,
+        `✓ Processed ${voiceState.results.length} voice memos`,
+        'success'
+    );
+
+    await updateVoiceLibraryDisplay();
+}
+
+async function processOneVoiceMemo(file, options, index, total) {
+    try {
+        elements.currentVoiceStatus.textContent = `${index + 1}/${total}: Processing "${file.name}"...`;
+        const transcript = window.prompt(
+            `Paste the transcript for "${file.name}" (or leave blank to skip):`,
+            ''
+        ) || '';
+
+        const memoData = await VoiceMemoProcessor.processVoiceMemo(file, transcript, options);
+        if (memoData) {
+            await VoiceMemoDB.saveMemo(memoData);
+            voiceState.results.push(memoData);
+        }
+    } catch (error) {
+        console.error('Error processing memo:', error);
+    }
+}
+
+function updateVoiceProgressUI(current, total) {
+    const percent = Math.round((current / total) * 100);
+    elements.voiceProgressText.textContent = `Processing ${current}/${total}`;
+    elements.voiceProgressPercent.textContent = `${percent}%`;
+    elements.voiceProgressFill.style.width = `${percent}%`;
+}
+
+async function updateVoiceLibraryDisplay() {
+    try {
+        const all = await VoiceMemoDB.getAll();
+        elements.voiceMemoCount.textContent = String(all.length);
+
+        const totalSeconds = all.reduce((sum, memo) => sum + (memo.duration_seconds || 0), 0);
+        elements.voiceMemoTotalDuration.textContent = String(Math.round(totalSeconds / 60));
+
+        if (all.length > 0) {
+            elements.voiceMemoLastUpdated.textContent = new Date(all[all.length - 1].timestamp).toLocaleString();
+            elements.voiceMemoItems.innerHTML = '';
+
+            all.slice(-5).reverse().forEach((memo) => {
+                const item = document.createElement('div');
+                item.className = 'voice-memo-item';
+
+                const info = document.createElement('div');
+                info.className = 'voice-memo-item-info';
+                info.innerHTML = `
+                    <div class="voice-memo-item-title">${escapeHtml(memo.file_name)}</div>
+                    <div class="voice-memo-item-meta">${new Date(memo.timestamp).toLocaleDateString()} • ${Math.round((memo.duration_seconds || 0) / 60)} min</div>
+                `;
+
+                const actions = document.createElement('div');
+                actions.className = 'voice-memo-item-actions';
+
+                const viewButton = document.createElement('button');
+                viewButton.className = 'btn btn-secondary btn-small';
+                viewButton.textContent = 'View';
+                viewButton.addEventListener('click', () => {
+                    viewVoiceMemo(memo.id);
+                });
+
+                const playButton = document.createElement('button');
+                playButton.className = 'btn btn-secondary btn-small';
+                playButton.textContent = 'Play';
+                playButton.addEventListener('click', () => {
+                    playVoiceMemo(memo.id);
+                });
+
+                actions.appendChild(viewButton);
+                actions.appendChild(playButton);
+                item.appendChild(info);
+                item.appendChild(actions);
+                elements.voiceMemoItems.appendChild(item);
+            });
+
+            elements.voiceMemoList.classList.remove('hidden');
+            elements.voiceMemoList.classList.add('active');
+        } else {
+            elements.voiceMemoLastUpdated.textContent = 'Never';
+            elements.voiceMemoItems.innerHTML = '';
+            elements.voiceMemoList.classList.add('hidden');
+            elements.voiceMemoList.classList.remove('active');
+        }
+    } catch (error) {
+        console.error('Voice library display failed:', error);
+    }
 }
 
 async function processOnePhoto(file, options, index, total) {
@@ -872,18 +1263,18 @@ async function performSearch() {
         return;
     }
 
-    const results = await SemanticSearch.search(query, filters);
-    displaySearchResults(results);
+    const results = await UnifiedSearch.search(query, filters);
+    displayUnifiedResults(results);
 }
 
-function displaySearchResults(results) {
+function displayUnifiedResults(results) {
     currentSearchResults = results.results;
     elements.searchEmpty.classList.add('hidden');
     elements.searchStats.classList.remove('hidden');
     elements.searchResults.classList.remove('hidden');
     elements.quickActions.classList.remove('hidden');
     elements.resultCount.textContent = String(results.count);
-    elements.searchTime.textContent = `(${results.time}ms)`;
+    elements.searchTime.textContent = `(${results.photos} photos, ${results.memos} memos, ${results.time}ms)`;
     elements.resultsContainer.innerHTML = '';
 
     if (results.count === 0) {
@@ -891,8 +1282,10 @@ function displaySearchResults(results) {
         return;
     }
 
-    results.results.forEach((photo, index) => {
-        const card = createResultCard(photo, index);
+    results.results.forEach((item, index) => {
+        const card = item.source === 'memo'
+            ? createMemoResultCard(item, index)
+            : createResultCard(item, index);
         elements.resultsContainer.appendChild(card);
     });
 }
@@ -953,6 +1346,55 @@ function createResultCard(photo, index) {
     return card;
 }
 
+function createMemoResultCard(memo, index) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+
+    const keyPointsHtml = (memo.key_points || [])
+        .slice(0, 2)
+        .map((point) => `<span class="keyword-tag">${escapeHtml(point)}</span>`)
+        .join('');
+
+    const duration = Math.round((memo.duration_seconds || 0) / 60);
+    const date = new Date(memo.timestamp).toLocaleDateString();
+    const preview = (memo.raw_transcript || '').substring(0, 150).replace(/\n/g, ' ');
+
+    card.innerHTML = `
+        <div class="result-header">
+            <div class="result-title">
+                <span class="result-type-badge">MEMO</span>
+                <h4>${escapeHtml(memo.file_name || `Memo ${index + 1}`)}</h4>
+            </div>
+            <span class="result-date">${date} • ${duration} min</span>
+            <div class="result-actions">
+                <button class="btn btn-secondary result-view-btn" data-memo-id="${memo.id}">View</button>
+                <button class="btn btn-secondary result-play-btn" data-memo-id="${memo.id}">▶️ Play</button>
+            </div>
+        </div>
+        <div class="result-content">
+            <p><strong>Summary:</strong> ${escapeHtml(memo.summary || 'N/A')}</p>
+            ${keyPointsHtml ? `<div class="result-keywords">${keyPointsHtml}</div>` : ''}
+            <div class="result-preview">${escapeHtml(preview)}...</div>
+        </div>
+    `;
+
+    card.querySelector('.result-view-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewVoiceMemo(memo.id);
+    });
+
+    card.querySelector('.result-play-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        playVoiceMemo(memo.id);
+    });
+
+    card.addEventListener('click', () => {
+        viewVoiceMemo(memo.id);
+    });
+
+    return card;
+}
+
 function showSearchEmpty() {
     currentSearchResults = [];
     elements.searchEmpty.classList.remove('hidden');
@@ -971,17 +1413,45 @@ async function viewPhotoDetail(id) {
 
     const compressed = photo.compressed_index || {};
     elements.resultModal.dataset.photoId = photo.id;
+    delete elements.resultModal.dataset.memoId;
     elements.modalTitle.textContent = photo.file_name || 'Photo Details';
     elements.modalSummary.textContent = compressed.summary || 'No semantic summary available.';
     elements.modalMetadata.textContent = `Type: ${compressed.type || 'document'} | Concepts: ${(compressed.concepts || []).join(', ') || 'None'} | Keywords: ${(compressed.keywords || []).join(', ') || 'None'}`;
+    elements.modalAudioSection.classList.add('hidden');
+    elements.modalAudioPlayer.pause();
+    elements.modalAudioPlayer.removeAttribute('src');
     elements.modalRawText.textContent = photo.raw_text || 'No OCR text stored.';
     elements.modalLlmOutput.textContent = photo.llm_output || 'No LLM output stored.';
     elements.resultModal.classList.remove('hidden');
 }
 
+async function viewVoiceMemo(id) {
+    let memo = currentSearchResults.find((item) => item.id === id);
+    if (!memo) {
+        memo = await VoiceMemoDB.getById(id);
+    }
+    if (!memo) return;
+
+    const compressed = memo.compressed_index || {};
+    delete elements.resultModal.dataset.photoId;
+    elements.resultModal.dataset.memoId = memo.id;
+    elements.modalTitle.textContent = memo.file_name || 'Voice Memo';
+    elements.modalSummary.textContent = memo.summary || 'No summary available.';
+    elements.modalMetadata.textContent = `Type: memo | Key points: ${(memo.key_points || []).join(' • ') || 'None'} | Keywords: ${(compressed.keywords || []).join(', ') || 'None'}`;
+    elements.modalAudioSection.classList.remove('hidden');
+    elements.modalAudioPlayer.src = memo.audio_data || '';
+    elements.modalRawText.textContent = memo.raw_transcript || 'No transcript stored.';
+    elements.modalLlmOutput.textContent = (memo.key_points || []).join('\n') || 'No extracted key points stored.';
+    elements.resultModal.classList.remove('hidden');
+}
+
 function closeResultModal() {
     elements.resultModal.classList.add('hidden');
+    elements.modalAudioPlayer.pause();
+    elements.modalAudioPlayer.removeAttribute('src');
+    elements.modalAudioSection.classList.add('hidden');
     delete elements.resultModal.dataset.photoId;
+    delete elements.resultModal.dataset.memoId;
 }
 
 async function copyPhotoJson(id) {
@@ -1002,19 +1472,20 @@ async function exportSearchResults() {
         confidence: parseInt(elements.confidenceFilter.value, 10)
     };
 
-    const results = await SemanticSearch.search(query, filters);
+    const results = await UnifiedSearch.search(query, filters);
     const exportData = {
         export_date: new Date().toISOString(),
         query,
         filters,
         total_results: results.count,
-        photos: results.results.map((photo) => ({
-            id: photo.id,
-            file_name: photo.file_name,
-            timestamp: photo.timestamp,
-            compressed_index: photo.compressed_index,
-            raw_text: photo.raw_text,
-            llm_output: photo.llm_output
+        items: results.results.map((item) => ({
+            id: item.id,
+            file_name: item.file_name,
+            source: item.source,
+            timestamp: item.timestamp,
+            compressed_index: item.compressed_index,
+            raw_text: item.raw_text || item.raw_transcript,
+            llm_output: item.llm_output || item.summary
         }))
     };
 
@@ -1049,6 +1520,15 @@ function quickSearch(term) {
     setTimeout(() => {
         elements.searchResults.scrollIntoView({ behavior: 'smooth' });
     }, 100);
+}
+
+async function playVoiceMemo(memoId) {
+    await viewVoiceMemo(memoId);
+    try {
+        await elements.modalAudioPlayer.play();
+    } catch (error) {
+        // Playback may still require an additional user gesture on some devices.
+    }
 }
 
 function switchBatchTab(tabName) {

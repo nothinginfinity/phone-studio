@@ -217,6 +217,7 @@
                     <button class="batch-tab-btn active" data-tab="upload">Upload & Process</button>
                     <button class="batch-tab-btn" data-tab="search">Search Index</button>
                     <button class="batch-tab-btn" data-tab="library">Photo Library</button>
+                    <button class="batch-tab-btn" data-tab="voiceMemos">🎙️ Voice Memos</button>
                 </div>
 
                 <div class="batch-tab-content active" id="uploadTab">
@@ -281,6 +282,7 @@
                                 <label class="filter-label" for="filterType">Content Type:</label>
                                 <select id="filterType" class="select select-small">
                                     <option value="">All Types</option>
+                                    <option value="memo">Voice Memo</option>
                                     <option value="contract">Contract</option>
                                     <option value="email">Email</option>
                                     <option value="program">Program</option>
@@ -371,6 +373,68 @@
                         <div id="libraryItems"></div>
                     </div>
                 </div>
+
+                <div class="batch-tab-content" id="voiceMemosTab">
+                    <div class="voice-section">
+                        <h3>Import Voice Memos</h3>
+                        <p class="help-text">Import voice memos from iOS Voice Memos. Paste the iOS transcript when prompted so it can be indexed.</p>
+
+                        <div class="upload-area">
+                            <input type="file" id="voiceMemoInput" accept="audio/m4a,audio/mp4,audio/wav,audio/mpeg" multiple class="hidden-input">
+                            <button id="selectVoiceMemosBtn" class="btn btn-primary">
+                                📁 Select Voice Memos
+                            </button>
+                            <p class="help-text" id="voiceMemoCountDisplay"></p>
+                        </div>
+
+                        <div class="process-options">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="voiceSummarize" checked> Summarize with LLM
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="voiceExtractKeypoints" checked> Extract Key Points
+                            </label>
+                        </div>
+
+                        <button id="startVoiceProcessBtn" class="btn btn-accent" disabled>
+                            ⚡ Process Voice Memos
+                        </button>
+
+                        <div id="voiceProgress" class="batch-progress hidden">
+                            <div class="progress-header">
+                                <span id="voiceProgressText">Processing 0/0</span>
+                                <span id="voiceProgressPercent">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="voiceProgressFill" class="progress-fill"></div>
+                            </div>
+                            <div class="progress-current">
+                                <p id="currentVoiceStatus">Waiting to start...</p>
+                            </div>
+                        </div>
+
+                        <div id="voiceStatus" class="status-message hidden"></div>
+                    </div>
+
+                    <div class="voice-section" style="margin-top: 24px;">
+                        <h3>Voice Memo Library</h3>
+
+                        <div class="library-stats">
+                            <p><strong>Total Memos:</strong> <span id="voiceMemoCount">0</span></p>
+                            <p><strong>Total Duration:</strong> <span id="voiceMemoTotalDuration">0</span> minutes</p>
+                            <p><strong>Last Processed:</strong> <span id="voiceMemoLastUpdated">Never</span></p>
+                        </div>
+
+                        <button id="clearVoiceIndexBtn" class="btn btn-outline" style="margin-top: 12px; width: 100%;">
+                            🗑️ Clear All Voice Memos
+                        </button>
+
+                        <div id="voiceMemoList" class="voice-memo-list hidden" style="margin-top: 16px;">
+                            <p class="help-text">Recently processed:</p>
+                            <div id="voiceMemoItems"></div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section id="resultModal" class="result-modal hidden">
@@ -389,6 +453,10 @@
                         <div class="modal-section">
                             <h4>Metadata</h4>
                             <p id="modalMetadata">—</p>
+                        </div>
+                        <div class="modal-section hidden" id="modalAudioSection">
+                            <h4>Audio</h4>
+                            <audio id="modalAudioPlayer" class="audio-player" controls></audio>
                         </div>
                         <div class="modal-section">
                             <h4>OCR Text</h4>
