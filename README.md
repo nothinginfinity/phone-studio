@@ -30,10 +30,25 @@ git push origin main
 
 The deployable app lives in [`docs/`](/Users/kanelawaccount/phone-studio/docs). Open [`docs/index.html`](/Users/kanelawaccount/phone-studio/docs/index.html) through a local server instead of `file://` so the manifest and service worker behave correctly.
 
-For local LLM testing:
-- Keep Locally AI running on the same device.
-- Load the Llama 3.2 3B model.
-- Confirm the in-app debug panel shows the localhost endpoint and a connected status.
+For LLM testing:
+- Select a hosted provider in the in-app Settings panel and save an API key locally.
+- The active provider endpoint and key status appear in the debug panel.
+- Localhost-based on-device inference remains a future path for the app.
+
+## LLM Provider Setup
+
+Phone Studio V1.1 supports multiple LLM providers:
+
+- **Groq** (Free, recommended): Get key at https://console.groq.com/keys
+- **Mistral** (Free): Get key at https://console.mistral.ai/api-keys
+- **DeepSeek**: Get key at https://platform.deepseek.com/api_keys
+- **OpenAI**: Get key at https://platform.openai.com/api-keys
+- **Claude (Anthropic)**: Get key at https://console.anthropic.com
+- **xAI (Grok)**: Get key at https://console.x.ai
+
+In the PWA, go to Settings panel -> Select provider -> Paste API key -> Save.
+
+Your API keys are stored locally on your device and never sent to our servers.
 
 ## GitHub Pages Deployment
 

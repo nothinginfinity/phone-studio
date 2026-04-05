@@ -50,7 +50,7 @@
 
             <!-- Step 4: LLM Processing -->
             <section class="panel llm-panel">
-                <h2>Step 4: Send to Local LLM</h2>
+                <h2>Step 4: Send to LLM</h2>
                 <div class="llm-controls">
                     <select id="llmPrompt" class="select">
                         <option value="structure">Structure Content (JSON)</option>
@@ -96,11 +96,43 @@
                 </div>
             </section>
 
+            <!-- Settings Panel -->
+            <section class="panel settings-panel">
+                <h2>⚙️ Settings</h2>
+
+                <div class="settings-group">
+                    <label for="llmProvider" class="label">LLM Provider</label>
+                    <select id="llmProvider" class="select">
+                        <option value="groq">Groq (Free, Fast)</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="mistral">Mistral AI (Free)</option>
+                        <option value="anthropic">Claude (Anthropic)</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="xai">xAI (Grok)</option>
+                    </select>
+                </div>
+
+                <div class="settings-group">
+                    <label for="apiKey" class="label">API Key</label>
+                    <input type="password" id="apiKey" class="select" placeholder="Paste your API key here (stored locally, never sent to our servers)">
+                    <p class="help-text" id="providerInstructions"></p>
+                    <button id="saveApiKeyBtn" class="btn btn-secondary" style="margin-top: 8px;">💾 Save API Key</button>
+                </div>
+
+                <div class="settings-group">
+                    <label class="label">About This Setting</label>
+                    <p class="help-text">
+                        Your API keys are stored locally on your iPhone using browser storage (localStorage).
+                        They are never sent to our servers or any third party. You control where they go.
+                    </p>
+                </div>
+            </section>
+
             <!-- Debug Panel -->
             <section class="panel debug-panel">
                 <h2>Debug Info</h2>
                 <div class="debug-info">
-                    <p><strong>Endpoint:</strong> <span id="endpointDebug">http://localhost:8000</span></p>
+                    <p><strong>Endpoint:</strong> <span id="endpointDebug">Not configured</span></p>
                     <p><strong>LLM Status:</strong> <span id="llmStatusDebug">Not connected</span></p>
                     <p><strong>Tesseract Status:</strong> <span id="tesseractStatusDebug">Loading...</span></p>
                     <p><strong>Storage:</strong> <span id="storageStatusDebug">Initializing...</span></p>

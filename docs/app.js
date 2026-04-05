@@ -1,17 +1,83 @@
 // V1 MVP: Local LLM integration. All processing on-device, no backend yet.
+// V1.1 adds hosted LLM provider support while preserving the local-first path.
+
+// Multi-LLM Provider Configuration
+const LLM_PROVIDERS = {
+    groq: {
+        name: 'Groq',
+        apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
+        model: 'mixtral-8x7b-32768',
+        free: true,
+        instructions: 'Get free API key at: https://console.groq.com/keys'
+    },
+    deepseek: {
+        name: 'DeepSeek',
+        apiUrl: 'https://api.deepseek.com/chat/completions',
+        model: 'deepseek-chat',
+        free: false,
+        instructions: 'Get API key at: https://platform.deepseek.com/api_keys'
+    },
+    mistral: {
+        name: 'Mistral AI',
+        apiUrl: 'https://api.mistral.ai/v1/chat/completions',
+        model: 'mistral-7b-instruct',
+        free: true,
+        instructions: 'Get free API key at: https://console.mistral.ai/api-keys'
+    },
+    anthropic: {
+        name: 'Claude (Anthropic)',
+        apiUrl: 'https://api.anthropic.com/v1/messages',
+        model: 'claude-3-haiku-20240307',
+        free: false,
+        instructions: 'Get API key at: https://console.anthropic.com'
+    },
+    openai: {
+        name: 'OpenAI',
+        apiUrl: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-4o-mini',
+        free: false,
+        instructions: 'Get API key at: https://platform.openai.com/api-keys'
+    },
+    xai: {
+        name: 'xAI (Grok)',
+        apiUrl: 'https://api.x.ai/v1/chat/completions',
+        model: 'grok-2-1212',
+        free: false,
+        instructions: 'Get API key at: https://console.x.ai'
+    }
+};
+
 const CONFIG = {
-    LLM_API: 'http://localhost:8000/v1/chat/completions',
-    LLM_HEALTH_ENDPOINTS: [
-        'http://localhost:8000/health',
-        'http://localhost:8000/v1/models'
-    ],
-    LLM_MODEL: 'default',
-    LLM_TIMEOUT: 30000,
-    HEALTH_TIMEOUT: 5000,
+    defaultProvider: 'groq',
+    timeout: 30000,
     DB_NAME: 'PhoneStudio',
     DB_VERSION: 1,
     STORE_NAME: 'screenshots',
 };
+
+// Local Storage for API Keys
+const ApiKeyManager = {
+    save: (provider, apiKey) => {
+        localStorage.setItem(`llm_api_key_${provider}`, apiKey);
+    },
+    get: (provider) => {
+        return localStorage.getItem(`llm_api_key_${provider}`) || '';
+    },
+    getActive: () => {
+        const provider = localStorage.getItem('llm_active_provider') || CONFIG.defaultProvider;
+        return {
+            provider,
+            apiKey: ApiKeyManager.get(provider)
+        };
+    },
+    setActive: (provider) => {
+        localStorage.setItem('llm_active_provider', provider);
+    }
+};
+
+function getProviderConfig(provider) {
+    return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
+}
 
 // State
 let db = null;
@@ -51,15 +117,26 @@ const elements = {
     endpointDebug: document.getElementById('endpointDebug'),
     storageStatusDebug: document.getElementById('storageStatusDebug'),
     lastErrorDebug: document.getElementById('lastErrorDebug'),
+    llmProvider: document.getElementById('llmProvider'),
+    apiKey: document.getElementById('apiKey'),
+    saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
+    providerInstructions: document.getElementById('providerInstructions'),
 };
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    elements.endpointDebug.textContent = new URL(CONFIG.LLM_API).origin;
+    const savedProvider = localStorage.getItem('llm_active_provider');
+    const activeProvider = LLM_PROVIDERS[savedProvider] ? savedProvider : CONFIG.defaultProvider;
+    ApiKeyManager.setActive(activeProvider);
+    elements.llmProvider.value = activeProvider;
+    elements.apiKey.value = ApiKeyManager.get(activeProvider);
+    updateProviderInstructions(activeProvider);
+    updateEndpointDebug(activeProvider);
+
     initEventListeners();
     registerServiceWorker();
     initDatabase();
-    checkLLMConnection();
+    checkLLMStatus();
     updateTesseractStatus();
 });
 
@@ -75,7 +152,32 @@ function initEventListeners() {
     elements.copyBtn.addEventListener('click', copyJSON);
     elements.resetBtn.addEventListener('click', resetApp);
     elements.llmPrompt.addEventListener('change', toggleCustomPrompt);
-    elements.tabBtns.forEach(btn => {
+    elements.llmProvider.addEventListener('change', (e) => {
+        const provider = e.target.value;
+        ApiKeyManager.setActive(provider);
+        elements.apiKey.value = ApiKeyManager.get(provider);
+        updateProviderInstructions(provider);
+        updateEndpointDebug(provider);
+        checkLLMStatus();
+    });
+    elements.saveApiKeyBtn.addEventListener('click', () => {
+        const provider = elements.llmProvider.value;
+        const apiKey = elements.apiKey.value.trim();
+
+        if (!apiKey) {
+            setLastError('API key cannot be empty.');
+            showStatus(elements.llmStatus, '✗ API key cannot be empty', 'error');
+            return;
+        }
+
+        ApiKeyManager.setActive(provider);
+        ApiKeyManager.save(provider, apiKey);
+        clearLastError();
+        showStatus(elements.llmStatus, `✓ ${LLM_PROVIDERS[provider].name} API key saved locally`, 'success');
+        updateEndpointDebug(provider);
+        checkLLMStatus();
+    });
+    elements.tabBtns.forEach((btn) => {
         btn.addEventListener('click', switchTab);
     });
 }
@@ -91,14 +193,10 @@ function handleScreenshotUpload(e) {
         state.screenshot = event.target.result;
         state.metadata.timestamp = new Date().toISOString();
 
-        // Show preview
         elements.imagePreview.src = state.screenshot;
         elements.imagePreview.classList.remove('hidden');
-
-        // Enable OCR button
         elements.ocrBtn.disabled = false;
 
-        // Show image info
         const img = new Image();
         img.onload = () => {
             state.metadata.imageSize = { width: img.width, height: img.height };
@@ -121,7 +219,7 @@ async function runOCR() {
             state.screenshot,
             'eng',
             {
-                logger: m => console.log('OCR:', m)
+                logger: (message) => console.log('OCR:', message)
             }
         );
 
@@ -130,8 +228,6 @@ async function runOCR() {
 
         elements.rawText.value = state.rawText;
         showStatus(elements.ocrStatus, `✓ OCR complete (${Math.round(confidence)}% confidence)`, 'success');
-
-        // Enable LLM button
         elements.llmBtn.disabled = false;
     } catch (error) {
         console.error('OCR Error:', error);
@@ -146,48 +242,102 @@ async function runOCR() {
 async function sendToLLM() {
     if (!state.rawText) return;
 
-    showStatus(elements.llmStatus, 'Connecting to local LLM...', 'loading');
+    const { provider, apiKey } = ApiKeyManager.getActive();
+    const providerConfig = getProviderConfig(provider);
+
+    if (!apiKey) {
+        setLastError('No API key set for the selected provider.');
+        showStatus(elements.llmStatus, '✗ No API key set. Add one in Settings.', 'error');
+        return;
+    }
+
+    showStatus(elements.llmStatus, `Sending to ${providerConfig.name}...`, 'loading');
     elements.llmBtn.disabled = true;
     clearLastError();
 
     try {
-        const llmReachable = await pingLLM();
-        if (!llmReachable) {
-            throw new Error('Locally AI is not reachable on http://localhost:8000. Open the app, start Llama 3.2 3B, and try again.');
-        }
-
         const prompt = buildPrompt();
+        let requestBody;
+        let headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        };
 
-        const response = await fetchWithTimeout(CONFIG.LLM_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: CONFIG.LLM_MODEL,
+        if (provider === 'anthropic') {
+            headers = {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true'
+            };
+            requestBody = {
+                model: providerConfig.model,
+                max_tokens: 2000,
                 messages: [
-                    { role: 'system', content: 'You are a content strategist helping extract structured information from screenshots.' },
-                    { role: 'user', content: prompt }
+                    {
+                        role: 'user',
+                        content: `You are a content strategist helping extract structured information from screenshots.\n\n${prompt}`
+                    }
+                ]
+            };
+        } else {
+            requestBody = {
+                model: providerConfig.model,
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are a content strategist helping extract structured information from screenshots.'
+                    },
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
                 ],
                 temperature: 0.7,
-                max_tokens: 2000,
-            }),
-        }, CONFIG.LLM_TIMEOUT);
+                max_tokens: 2000
+            };
+        }
+
+        const response = await fetchWithTimeout(providerConfig.apiUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(requestBody),
+        }, CONFIG.timeout);
 
         if (!response.ok) {
-            throw new Error(`LLM API error: ${response.status}`);
+            const errorText = await response.text();
+            let message = response.statusText;
+
+            if (errorText) {
+                try {
+                    const errorData = JSON.parse(errorText);
+                    message = errorData.error?.message || errorData.message || errorText;
+                } catch (parseError) {
+                    message = errorText;
+                }
+            }
+
+            throw new Error(`${providerConfig.name} error: ${message}`);
         }
 
         const data = await response.json();
-        state.llmOutput = data?.choices?.[0]?.message?.content || '';
+        let llmOutput = '';
 
-        if (!state.llmOutput) {
-            throw new Error('LLM returned an empty response. Confirm the model is loaded in Locally AI.');
+        if (provider === 'anthropic') {
+            llmOutput = data?.content?.find((block) => block.type === 'text')?.text || '';
+        } else {
+            llmOutput = data?.choices?.[0]?.message?.content || '';
         }
 
-        // Build final JSON
-        await buildOutput();
-        showStatus(elements.llmStatus, '✓ LLM processing complete', 'success');
+        state.llmOutput = llmOutput;
 
-        // Enable download/copy buttons
+        if (!state.llmOutput) {
+            throw new Error(`No text was returned by ${providerConfig.name}.`);
+        }
+
+        await buildOutput();
+        showStatus(elements.llmStatus, `✓ ${providerConfig.name} processing complete`, 'success');
+
         elements.downloadBtn.disabled = false;
         elements.copyBtn.disabled = false;
     } catch (error) {
@@ -230,6 +380,8 @@ ${text}`
 
 // Build Output JSON
 async function buildOutput() {
+    const { provider } = ApiKeyManager.getActive();
+    const providerConfig = getProviderConfig(provider);
     const output = {
         id: `screenshot_${Date.now()}`,
         timestamp: state.metadata.timestamp,
@@ -240,18 +392,19 @@ async function buildOutput() {
             image_size: state.metadata.imageSize,
             ocr_confidence: state.metadata.ocrConfidence,
             prompt_type: elements.llmPrompt.value,
+            llm_provider: provider,
+            llm_model: providerConfig.model || null,
         },
         llm_ready: true,
         approval_state: 'draft',
-        linked_voice_id: null, // To be set by user later
+        linked_voice_id: null,
     };
 
     state.currentRecord = output;
     elements.jsonOutput.value = JSON.stringify(output, null, 2);
     elements.rawOutput.value = state.rawText;
-
-    // Generate markdown
     elements.markdownOutput.value = state.llmOutput;
+
     await persistRecord(output);
 }
 
@@ -260,10 +413,10 @@ function downloadJSON() {
     const json = elements.jsonOutput.value;
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `screenshot_${Date.now()}.json`;
-    a.click();
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `screenshot_${Date.now()}.json`;
+    link.click();
     URL.revokeObjectURL(url);
 }
 
@@ -300,6 +453,7 @@ function resetApp() {
 
     elements.screenshotInput.value = '';
     elements.imagePreview.classList.add('hidden');
+    elements.imagePreview.removeAttribute('src');
     elements.rawText.value = '';
     elements.jsonOutput.value = '';
     elements.markdownOutput.value = '';
@@ -329,7 +483,7 @@ function toggleCustomPrompt() {
 function switchTab(e) {
     const tab = e.target.dataset.tab;
 
-    elements.tabBtns.forEach(btn => btn.classList.remove('active'));
+    elements.tabBtns.forEach((btn) => btn.classList.remove('active'));
     e.target.classList.add('active');
 
     elements.jsonOutput.classList.add('hidden');
@@ -341,18 +495,15 @@ function switchTab(e) {
     else if (tab === 'raw') elements.rawOutput.classList.remove('hidden');
 }
 
-// Check LLM Connection
-async function checkLLMConnection() {
-    try {
-        const connected = await pingLLM();
-        if (connected) {
-            elements.llmStatusDebug.textContent = '✓ Connected';
-            elements.llmStatusDebug.style.color = '#34d399';
-        } else {
-            throw new Error('Not responding');
-        }
-    } catch (error) {
-        elements.llmStatusDebug.textContent = '✗ Not connected (start Locally AI)';
+async function checkLLMStatus() {
+    const { provider, apiKey } = ApiKeyManager.getActive();
+    const providerName = getProviderConfig(provider).name;
+
+    if (apiKey) {
+        elements.llmStatusDebug.textContent = `✓ ${providerName} (API key set)`;
+        elements.llmStatusDebug.style.color = '#34d399';
+    } else {
+        elements.llmStatusDebug.textContent = `⚠ ${providerName} (No API key)`;
         elements.llmStatusDebug.style.color = 'var(--accent)';
     }
 }
@@ -365,6 +516,18 @@ function updateTesseractStatus() {
     } else {
         elements.tesseractStatusDebug.textContent = '⏳ Loading...';
     }
+}
+
+function updateProviderInstructions(provider) {
+    const config = getProviderConfig(provider);
+    elements.providerInstructions.innerHTML = `
+        <strong>${config.name}${config.free ? ' (Free)' : ''}</strong><br>
+        ${config.instructions}
+    `;
+}
+
+function updateEndpointDebug(provider) {
+    elements.endpointDebug.textContent = getProviderConfig(provider).apiUrl;
 }
 
 // Utility: Show Status Message
@@ -389,7 +552,7 @@ function setStorageStatus(message, color = 'var(--text-secondary)') {
     elements.storageStatusDebug.style.color = color;
 }
 
-async function fetchWithTimeout(url, options = {}, timeout = CONFIG.HEALTH_TIMEOUT) {
+async function fetchWithTimeout(url, options = {}, timeout = CONFIG.timeout) {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), timeout);
 
@@ -401,21 +564,6 @@ async function fetchWithTimeout(url, options = {}, timeout = CONFIG.HEALTH_TIMEO
     } finally {
         window.clearTimeout(timeoutId);
     }
-}
-
-async function pingLLM() {
-    for (const endpoint of CONFIG.LLM_HEALTH_ENDPOINTS) {
-        try {
-            const response = await fetchWithTimeout(endpoint, { method: 'GET' }, CONFIG.HEALTH_TIMEOUT);
-            if (response.ok) {
-                return true;
-            }
-        } catch (error) {
-            // Try the next health endpoint.
-        }
-    }
-
-    return false;
 }
 
 function initDatabase() {
@@ -484,5 +632,4 @@ function registerServiceWorker() {
     });
 }
 
-// LLM Connection Monitor (check every 10s)
-setInterval(checkLLMConnection, 10000);
+setInterval(checkLLMStatus, 5000);
