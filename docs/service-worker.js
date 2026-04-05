@@ -1,4 +1,4 @@
-const CACHE_NAME = 'phone-studio-v4-iphone-ux';
+const CACHE_NAME = 'phone-studio-v5-content-wizard';
 const APP_SHELL = [
   './',
   './index.html',

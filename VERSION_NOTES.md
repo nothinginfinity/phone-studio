@@ -1,5 +1,25 @@
 # Phone Studio Versions
 
+## V5 - Content Creation Wizard
+
+**New Features:**
+- 4-step guided content creation wizard
+- Platform templates for Instagram, TikTok, LinkedIn, Blog, Email, and Twitter/X
+- Source selection modes:
+  - Random picks from the library
+  - Search by topic
+  - Manual multi-select
+  - Combine photos and memos
+  - Jump to upload or record more source material
+- In-app review, editing, copy, and download for generated drafts
+
+**Workflow:**
+1. Open `Create Content`
+2. Choose a platform
+3. Pick source material from indexed photos and memos
+4. Generate a draft with the active LLM
+5. Edit, copy, or download
+
 ## iPhone UX Pass - App-Like Home & Install Guidance
 
 **New Features:**

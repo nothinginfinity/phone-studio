@@ -444,6 +444,17 @@ let voiceState = {
     results: []
 };
 let currentICloudMemos = [];
+const contentWizardState = {
+    currentStep: 1,
+    platform: null,
+    source: null,
+    selectedContent: [],
+    generatedContent: '',
+    searchQuery: '',
+    step2Mode: 'source',
+    isGenerating: false,
+    runId: 0
+};
 
 const VoiceMemoProcessor = {
     async processVoiceMemo(file, transcript, options) {
@@ -1008,6 +1019,494 @@ function openQuickVoiceHub() {
     scrollToPanel(elements.batchProcessorPanel);
 }
 
+function resetContentWizardState() {
+    contentWizardState.currentStep = 1;
+    contentWizardState.platform = null;
+    contentWizardState.source = null;
+    contentWizardState.selectedContent = [];
+    contentWizardState.generatedContent = '';
+    contentWizardState.searchQuery = '';
+    contentWizardState.step2Mode = 'source';
+    contentWizardState.isGenerating = false;
+    contentWizardState.runId += 1;
+}
+
+function openContentWizard() {
+    resetContentWizardState();
+    elements.platformGrid.querySelectorAll('.platform-card').forEach((card) => card.classList.remove('selected'));
+    elements.contentCreationWizard.classList.remove('hidden');
+    elements.contentCreationWizard.setAttribute('aria-hidden', 'false');
+    showWizardStep(1);
+}
+
+function closeWizard() {
+    elements.contentCreationWizard.classList.add('hidden');
+    elements.contentCreationWizard.setAttribute('aria-hidden', 'true');
+    resetContentWizardState();
+    clearWizardSelections();
+    elements.platformGrid.querySelectorAll('.platform-card').forEach((card) => card.classList.remove('selected'));
+    elements.generatedContentPreview.textContent = '';
+    elements.editableContent.value = '';
+    elements.generationProgress.style.width = '0%';
+    elements.generationStatus.textContent = 'Analyzing content...';
+    elements.contentSearchInput.value = '';
+    elements.searchResultsForContent.classList.add('hidden');
+}
+
+function showWizardStep(step) {
+    contentWizardState.currentStep = step;
+    [
+        elements.step1Platform,
+        elements.step2Source,
+        elements.step2BSearch,
+        elements.step2CManual,
+        elements.step3Generate,
+        elements.step4Review
+    ].forEach((element) => element.classList.add('hidden'));
+
+    if (step === 1) {
+        elements.step1Platform.classList.remove('hidden');
+    } else if (step === 2) {
+        if (contentWizardState.step2Mode === 'search') {
+            elements.step2BSearch.classList.remove('hidden');
+        } else if (contentWizardState.step2Mode === 'manual') {
+            elements.step2CManual.classList.remove('hidden');
+        } else {
+            elements.step2Source.classList.remove('hidden');
+        }
+    } else if (step === 3) {
+        elements.step3Generate.classList.remove('hidden');
+        if (!contentWizardState.isGenerating && !contentWizardState.generatedContent) {
+            generateContent();
+        }
+    } else if (step === 4) {
+        elements.step4Review.classList.remove('hidden');
+    }
+
+    elements.wizardStep.textContent = `Step ${step} of 4`;
+    updateWizardButtons();
+}
+
+function updateWizardButtons() {
+    const isRootSourceStep = contentWizardState.currentStep === 2 && contentWizardState.step2Mode === 'source';
+    elements.prevBtn.style.display = contentWizardState.currentStep === 1 ? 'none' : 'block';
+    elements.nextBtn.style.display = contentWizardState.currentStep === 3 || isRootSourceStep ? 'none' : 'block';
+
+    if (contentWizardState.currentStep === 1) {
+        elements.nextBtn.textContent = 'Next →';
+        elements.nextBtn.disabled = !contentWizardState.platform;
+        return;
+    }
+
+    if (contentWizardState.currentStep === 2) {
+        elements.nextBtn.textContent = 'Generate →';
+        const requiresMultiple = contentWizardState.source === 'combine';
+        const selectedCount = contentWizardState.selectedContent.length;
+        elements.nextBtn.disabled = requiresMultiple ? selectedCount < 2 : selectedCount < 1;
+        return;
+    }
+
+    if (contentWizardState.currentStep === 4) {
+        elements.nextBtn.textContent = '✓ Done';
+        elements.nextBtn.disabled = !elements.editableContent.value.trim();
+        return;
+    }
+
+    elements.nextBtn.textContent = 'Next →';
+    elements.nextBtn.disabled = false;
+}
+
+function selectPlatform(platform) {
+    contentWizardState.platform = platform;
+    elements.platformGrid.querySelectorAll('.platform-card').forEach((card) => {
+        card.classList.toggle('selected', card.dataset.platform === platform);
+    });
+    showWizardStep(2);
+}
+
+function clearWizardSelections() {
+    contentWizardState.selectedContent = [];
+    if (elements.selectionCount) {
+        elements.selectionCount.innerHTML = '<strong>0</strong> items selected';
+    }
+    if (elements.contentSelectionGrid) {
+        elements.contentSelectionGrid.querySelectorAll('.content-item').forEach((item) => {
+            item.classList.remove('selected');
+        });
+    }
+    if (elements.contentSearchItems) {
+        elements.contentSearchItems.querySelectorAll('.content-item-small').forEach((item) => {
+            item.classList.remove('selected');
+        });
+    }
+}
+
+function getWizardItemType(item) {
+    return item.raw_transcript || item.source === 'memo' ? 'memo' : 'photo';
+}
+
+function getWizardItemId(item) {
+    return `${getWizardItemType(item)}:${item.id}`;
+}
+
+function toggleWizardItemSelection(item) {
+    const itemId = getWizardItemId(item);
+    const exists = contentWizardState.selectedContent.some((selected) => getWizardItemId(selected) === itemId);
+
+    if (exists) {
+        contentWizardState.selectedContent = contentWizardState.selectedContent.filter((selected) => getWizardItemId(selected) !== itemId);
+    } else {
+        contentWizardState.selectedContent.push(item);
+    }
+
+    const selectedCount = contentWizardState.selectedContent.length;
+    elements.selectionCount.innerHTML = `<strong>${selectedCount}</strong> items selected`;
+    updateWizardButtons();
+}
+
+async function getWizardLibraryItems() {
+    const [photos, memos] = await Promise.all([BatchDB.getAll(), VoiceMemoDB.getAll()]);
+    return [
+        ...photos.map((item) => ({ ...item, source: 'photo' })),
+        ...memos.map((item) => ({ ...item, source: 'memo' }))
+    ];
+}
+
+async function selectRandomContent() {
+    const libraryItems = await getWizardLibraryItems();
+    if (libraryItems.length === 0) {
+        showStatus(elements.llmStatus, '✗ No indexed content yet. Upload images or record memos first.', 'error');
+        return;
+    }
+
+    const shuffled = [...libraryItems].sort(() => Math.random() - 0.5);
+    const count = Math.min(shuffled.length, Math.max(2, Math.floor(Math.random() * 3) + 2));
+    contentWizardState.selectedContent = shuffled.slice(0, count);
+    moveToContentGeneration();
+}
+
+function showSearchForContent() {
+    contentWizardState.step2Mode = 'search';
+    clearWizardSelections();
+    elements.contentSearchInput.value = '';
+    elements.contentSearchItems.innerHTML = '';
+    elements.searchResultsForContent.classList.add('hidden');
+    showWizardStep(2);
+    window.setTimeout(() => elements.contentSearchInput.focus({ preventScroll: true }), 100);
+}
+
+async function showManualSelection(mode = 'manual') {
+    contentWizardState.step2Mode = 'manual';
+    contentWizardState.source = mode;
+    clearWizardSelections();
+
+    const libraryItems = await getWizardLibraryItems();
+    elements.contentSelectionGrid.innerHTML = '';
+
+    if (libraryItems.length === 0) {
+        elements.contentSelectionGrid.innerHTML = '<p class="help-text">No indexed content yet. Add screenshots or voice memos first.</p>';
+        showWizardStep(2);
+        return;
+    }
+
+    libraryItems.forEach((item, index) => {
+        elements.contentSelectionGrid.appendChild(createSelectableContent(item, index));
+    });
+
+    showWizardStep(2);
+}
+
+function createSelectableContent(item, index) {
+    const type = getWizardItemType(item);
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.className = 'content-item';
+    element.dataset.index = String(index);
+    element.dataset.itemId = getWizardItemId(item);
+
+    const thumbnail = document.createElement('div');
+    thumbnail.className = 'content-item-thumbnail';
+    thumbnail.textContent = type === 'photo' ? '📷' : '🎙️';
+
+    const name = document.createElement('div');
+    name.className = 'content-item-name';
+    name.textContent = item.file_name || `${type === 'photo' ? 'Photo' : 'Memo'} ${index + 1}`;
+
+    element.appendChild(thumbnail);
+    element.appendChild(name);
+    element.addEventListener('click', () => {
+        element.classList.toggle('selected');
+        toggleWizardItemSelection(item);
+    });
+
+    return element;
+}
+
+async function performContentSearch() {
+    const query = elements.contentSearchInput.value.trim();
+    contentWizardState.searchQuery = query;
+
+    if (query.length < 2) {
+        elements.searchResultsForContent.classList.add('hidden');
+        elements.contentSearchItems.innerHTML = '';
+        clearWizardSelections();
+        return;
+    }
+
+    const results = await UnifiedSearch.search(query, { sortBy: 'relevance', confidence: 0 });
+    displaySearchResultsForContent(results.results.slice(0, 12));
+}
+
+function displaySearchResultsForContent(results) {
+    clearWizardSelections();
+    elements.searchResultsForContent.classList.remove('hidden');
+    elements.contentSearchCount.textContent = String(results.length);
+    elements.contentSearchItems.innerHTML = '';
+
+    if (results.length === 0) {
+        elements.contentSearchItems.innerHTML = '<p class="help-text">No results found. Try a different topic.</p>';
+        return;
+    }
+
+    results.forEach((item) => {
+        const type = getWizardItemType(item);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'content-item-small';
+        button.dataset.itemId = getWizardItemId(item);
+        const summary = type === 'photo'
+            ? item.compressed_index?.summary || (item.raw_text || '').slice(0, 80)
+            : item.summary || (item.raw_transcript || '').slice(0, 80);
+        button.innerHTML = `
+            <strong>${type === 'photo' ? '📷' : '🎙️'} ${escapeHtml(item.file_name || 'Item')}</strong>
+            <div class="help-text">${escapeHtml(summary || 'No summary available.')}</div>
+        `;
+        button.addEventListener('click', () => {
+            button.classList.toggle('selected');
+            toggleWizardItemSelection(item);
+        });
+        elements.contentSearchItems.appendChild(button);
+    });
+}
+
+function moveToContentGeneration() {
+    contentWizardState.generatedContent = '';
+    contentWizardState.currentStep = 3;
+    showWizardStep(3);
+}
+
+function getPlatformLabel(platform) {
+    const labels = {
+        instagram: 'Instagram',
+        tiktok: 'TikTok',
+        linkedin: 'LinkedIn',
+        blog: 'Blog Post',
+        email: 'Email',
+        twitter: 'Twitter'
+    };
+    return labels[platform] || platform;
+}
+
+function summariseWizardSource(item) {
+    if (getWizardItemType(item) === 'memo') {
+        return [
+            `Voice Memo: ${item.file_name || item.id}`,
+            `Summary: ${item.summary || 'No summary available.'}`,
+            `Key Points: ${(item.key_points || []).join(', ') || 'None'}`,
+            `Transcript Excerpt: ${(item.raw_transcript || '').slice(0, 500)}`
+        ].join('\n');
+    }
+
+    return [
+        `Photo: ${item.file_name || item.id}`,
+        `Summary: ${item.compressed_index?.summary || 'No summary available.'}`,
+        `Concepts: ${(item.compressed_index?.concepts || []).join(', ') || 'None'}`,
+        `Keywords: ${(item.compressed_index?.keywords || []).join(', ') || 'None'}`,
+        `OCR Excerpt: ${(item.raw_text || '').slice(0, 500)}`
+    ].join('\n');
+}
+
+function buildContentPrompt(selectedContent, platform) {
+    const contentSummary = selectedContent
+        .map((item, index) => `Source ${index + 1}\n${summariseWizardSource(item)}`)
+        .join('\n\n');
+
+    const platformPrompts = {
+        instagram: `Create an engaging Instagram caption based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Strong hook in the opening line\n- Use relevant emojis sparingly\n- Include 3-5 hashtags\n- Keep it under 200 words\n- End with a call to action`,
+        tiktok: `Create a TikTok script and hook based on this source material.\n\n${contentSummary}\n\nRequirements:\n- First 3 seconds must grab attention\n- 30-60 second script structure\n- Include 3 concrete points\n- End with a clear CTA`,
+        linkedin: `Create a professional LinkedIn post based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Start with a compelling insight\n- 200-300 words\n- Professional but conversational tone\n- Include 1-2 concrete takeaways\n- End with an engagement question`,
+        blog: `Create a blog post outline based on this source material.\n\n${contentSummary}\n\nRequirements:\n- SEO-friendly title\n- 5-section outline with subheadings\n- Include examples or proof points\n- End with a call to action`,
+        email: `Create an email newsletter draft based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Subject line under 50 characters\n- Preview text\n- Clear structure with 3-4 key insights\n- Include a strong CTA`,
+        twitter: `Create a Twitter/X thread based on this source material.\n\n${contentSummary}\n\nRequirements:\n- 5-7 connected tweets\n- Use 1/, 2/, etc.\n- Keep each post under 280 characters\n- End with engagement or CTA`
+    };
+
+    return platformPrompts[platform] || platformPrompts.instagram;
+}
+
+async function generateContent() {
+    const runId = contentWizardState.runId;
+    const { provider, apiKey } = ApiKeyManager.getActive();
+    const providerConfig = getProviderConfig(provider);
+
+    if (!providerSupportsChat(provider)) {
+        elements.generationStatus.textContent = `${providerConfig.name} is not available for content generation yet. Switch to a text provider in Settings.`;
+        return;
+    }
+
+    if (!apiKey) {
+        elements.generationStatus.textContent = 'No API key set for the active provider. Add one in Settings first.';
+        return;
+    }
+
+    contentWizardState.isGenerating = true;
+    elements.generatedPlatform.textContent = getPlatformLabel(contentWizardState.platform);
+    updateGenerationProgress(12, 'Preparing source material...');
+
+    try {
+        const prompt = buildContentPrompt(contentWizardState.selectedContent, contentWizardState.platform);
+        updateGenerationProgress(36, `Sending to ${providerConfig.name}...`);
+
+        const response = await requestLLM({
+            provider,
+            apiKey,
+            systemPrompt: 'You are an expert content creator. Produce polished, platform-optimized content from source notes and screenshots.',
+            userPrompt: prompt,
+            temperature: 0.75,
+            maxTokens: 1200,
+            timeout: CONFIG.timeout
+        });
+
+        updateGenerationProgress(82, 'Formatting draft...');
+        if (runId !== contentWizardState.runId) {
+            return;
+        }
+        contentWizardState.generatedContent = response || '';
+        elements.generatedContentPreview.textContent = contentWizardState.generatedContent;
+        elements.editableContent.value = contentWizardState.generatedContent;
+        updateGenerationProgress(100, 'Draft ready.');
+        contentWizardState.isGenerating = false;
+        showWizardStep(4);
+    } catch (error) {
+        if (runId !== contentWizardState.runId) {
+            return;
+        }
+        console.error('Generation error:', error);
+        elements.generationStatus.textContent = `Error: ${error.message}`;
+        contentWizardState.isGenerating = false;
+    }
+}
+
+function updateGenerationProgress(percent, message) {
+    elements.generationProgress.style.width = `${percent}%`;
+    elements.generationStatus.textContent = message;
+}
+
+async function copyGeneratedContent() {
+    const content = elements.editableContent.value.trim();
+    if (!content) return;
+    await copyText(content, '✓ Content copied to clipboard');
+}
+
+function downloadGeneratedContent() {
+    const content = elements.editableContent.value.trim();
+    if (!content) return;
+
+    const platform = contentWizardState.platform || 'content';
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `phone-studio-${platform}-${Date.now()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showStatus(elements.llmStatus, '✓ Draft downloaded', 'success');
+}
+
+function nextStep() {
+    if (contentWizardState.currentStep === 1) {
+        if (!contentWizardState.platform) {
+            showStatus(elements.llmStatus, '✗ Choose a platform first', 'error');
+            return;
+        }
+        showWizardStep(2);
+        return;
+    }
+
+    if (contentWizardState.currentStep === 2) {
+        const required = contentWizardState.source === 'combine' ? 2 : 1;
+        if (contentWizardState.selectedContent.length < required) {
+            showStatus(elements.llmStatus, `✗ Select at least ${required} item(s)`, 'error');
+            return;
+        }
+        moveToContentGeneration();
+        return;
+    }
+
+    if (contentWizardState.currentStep === 4) {
+        copyGeneratedContent().finally(closeWizard);
+    }
+}
+
+function previousStep() {
+    if (contentWizardState.currentStep === 4 || contentWizardState.currentStep === 3) {
+        contentWizardState.step2Mode = 'source';
+        showWizardStep(2);
+        return;
+    }
+
+    if (contentWizardState.currentStep === 2 && contentWizardState.step2Mode !== 'source') {
+        contentWizardState.step2Mode = 'source';
+        clearWizardSelections();
+        showWizardStep(2);
+        return;
+    }
+
+    if (contentWizardState.currentStep > 1) {
+        showWizardStep(contentWizardState.currentStep - 1);
+    }
+}
+
+function selectSource(source) {
+    contentWizardState.source = source;
+
+    if (source === 'random') {
+        selectRandomContent();
+        return;
+    }
+
+    if (source === 'search') {
+        showSearchForContent();
+        return;
+    }
+
+    if (source === 'manual') {
+        showManualSelection('manual');
+        return;
+    }
+
+    if (source === 'combine') {
+        showManualSelection('combine');
+        return;
+    }
+
+    if (source === 'upload') {
+        closeWizard();
+        scrollToPanel(elements.screenshotPanel);
+        elements.uploadBtn.click();
+        showStatus(elements.llmStatus, '✓ Add a screenshot, then return to Create Content when it is indexed.', 'success');
+        return;
+    }
+
+    if (source === 'record') {
+        closeWizard();
+        openQuickVoiceHub();
+        openQuickRecorder();
+        return;
+    }
+}
+
 function providerSupportsChat(provider) {
     return getProviderConfig(provider).supportsChat !== false;
 }
@@ -1243,6 +1742,38 @@ const elements = {
     quickScreenshotBtn: document.getElementById('quickScreenshotBtn'),
     quickSearchBtn: document.getElementById('quickSearchBtn'),
     quickVoiceHubBtn: document.getElementById('quickVoiceHubBtn'),
+    createContentBtn: document.getElementById('createContentBtn'),
+    contentCreationWizard: document.getElementById('contentCreationWizard'),
+    wizardStep: document.getElementById('wizardStep'),
+    step1Platform: document.getElementById('step1Platform'),
+    step2Source: document.getElementById('step2Source'),
+    step2BSearch: document.getElementById('step2BSearch'),
+    step2CManual: document.getElementById('step2CManual'),
+    step3Generate: document.getElementById('step3Generate'),
+    step4Review: document.getElementById('step4Review'),
+    platformGrid: document.getElementById('platformGrid'),
+    randomSourceBtn: document.getElementById('randomSourceBtn'),
+    searchSourceBtn: document.getElementById('searchSourceBtn'),
+    manualSourceBtn: document.getElementById('manualSourceBtn'),
+    uploadMoreBtn: document.getElementById('uploadMoreBtn'),
+    recordMoreBtn: document.getElementById('recordMoreBtn'),
+    combineSourceBtn: document.getElementById('combineSourceBtn'),
+    contentSearchInput: document.getElementById('contentSearchInput'),
+    searchResultsForContent: document.getElementById('searchResultsForContent'),
+    contentSearchCount: document.getElementById('contentSearchCount'),
+    contentSearchItems: document.getElementById('contentSearchItems'),
+    contentSelectionGrid: document.getElementById('contentSelectionGrid'),
+    selectionCount: document.getElementById('selectionCount'),
+    generatedPlatform: document.getElementById('generatedPlatform'),
+    generationProgress: document.getElementById('generationProgress'),
+    generationStatus: document.getElementById('generationStatus'),
+    generatedContentPreview: document.getElementById('generatedContentPreview'),
+    editableContent: document.getElementById('editableContent'),
+    copyGeneratedContentBtn: document.getElementById('copyGeneratedContentBtn'),
+    downloadGeneratedContentBtn: document.getElementById('downloadGeneratedContentBtn'),
+    prevBtn: document.getElementById('prevBtn'),
+    nextBtn: document.getElementById('nextBtn'),
+    closeWizardBtn: document.getElementById('closeWizardBtn'),
     dockHomeBtn: document.getElementById('dockHomeBtn'),
     dockRecordBtn: document.getElementById('dockRecordBtn'),
     dockSearchBtn: document.getElementById('dockSearchBtn'),
@@ -1434,6 +1965,33 @@ function initEventListeners() {
     });
     elements.quickSearchBtn.addEventListener('click', openQuickSearch);
     elements.quickVoiceHubBtn.addEventListener('click', openQuickVoiceHub);
+    elements.createContentBtn.addEventListener('click', openContentWizard);
+    elements.platformGrid.addEventListener('click', (e) => {
+        const button = e.target.closest('.platform-card[data-platform]');
+        if (!button) return;
+        selectPlatform(button.dataset.platform);
+    });
+    elements.randomSourceBtn.addEventListener('click', () => selectSource('random'));
+    elements.searchSourceBtn.addEventListener('click', () => selectSource('search'));
+    elements.manualSourceBtn.addEventListener('click', () => selectSource('manual'));
+    elements.uploadMoreBtn.addEventListener('click', () => selectSource('upload'));
+    elements.recordMoreBtn.addEventListener('click', () => selectSource('record'));
+    elements.combineSourceBtn.addEventListener('click', () => selectSource('combine'));
+    elements.contentSearchInput.addEventListener('input', performContentSearch);
+    elements.prevBtn.addEventListener('click', previousStep);
+    elements.nextBtn.addEventListener('click', nextStep);
+    elements.closeWizardBtn.addEventListener('click', closeWizard);
+    elements.contentCreationWizard.addEventListener('click', (e) => {
+        if (e.target === elements.contentCreationWizard) {
+            closeWizard();
+        }
+    });
+    elements.copyGeneratedContentBtn.addEventListener('click', copyGeneratedContent);
+    elements.downloadGeneratedContentBtn.addEventListener('click', downloadGeneratedContent);
+    elements.editableContent.addEventListener('input', () => {
+        elements.generatedContentPreview.textContent = elements.editableContent.value;
+        updateWizardButtons();
+    });
     elements.dockHomeBtn.addEventListener('click', () => {
         scrollToPanel(elements.appHomePanel);
     });

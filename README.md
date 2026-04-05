@@ -92,6 +92,36 @@ Phone Studio now includes an iPhone-first home dashboard designed to feel closer
 - Larger voice-record controls and a more prominent recording entry point
 - Optional launcher guidance for using a Shortcut or Action Button to open Phone Studio quickly
 
+## V5 - Create Content Workflow
+
+Phone Studio now includes a guided `Create Content` wizard that turns indexed screenshots and voice memos into platform-ready drafts.
+
+### Flow
+
+1. Tap `✨ Create Content`
+2. Choose a platform:
+   - Instagram
+   - TikTok
+   - LinkedIn
+   - Blog Post
+   - Email
+   - Twitter / X
+3. Choose content sources:
+   - Random picks from your library
+   - Search your indexed content by topic
+   - Manual multi-select
+   - Combine multiple photos and memos
+   - Jump out to upload more images or record more voice notes
+4. Generate the draft with your active LLM provider
+5. Review, edit, copy, or download the result
+
+### Output
+
+- Platform-specific prompts tuned for short-form, long-form, email, and thread content
+- In-app editing before export
+- Copy-to-clipboard or plain-text download
+- Works with the same active provider configured in Settings
+
 ## V1.5 Features
 
 - Screenshot capture plus OCR extraction

@@ -102,11 +102,141 @@
                     </button>
                 </div>
 
+                <section class="home-create-content">
+                    <button id="createContentBtn" class="btn btn-create-content" type="button">
+                        ✨ Create Content
+                    </button>
+                    <p class="help-text">Turn your indexed photos and memos into posts, emails, threads, and outlines.</p>
+                </section>
+
                 <div class="launcher-tip launcher-tip-secondary">
                     <strong>Launcher Setup</strong>
                     <p class="help-text">Best setup on iPhone: Add to Home Screen first. Optional next step: use a Shortcut to open Phone Studio and assign it to Action Button, Back Tap, or the Lock Screen.</p>
                 </div>
             </section>
+
+            <div id="contentCreationWizard" class="wizard hidden" aria-hidden="true">
+                <div class="wizard-container">
+                    <div class="wizard-header">
+                        <h2>✨ Create Content</h2>
+                        <p id="wizardStep" class="wizard-step">Step 1 of 4</p>
+                    </div>
+
+                    <div id="step1Platform" class="wizard-step-content">
+                        <h3>Choose Platform</h3>
+                        <p class="help-text">Which platform are you creating content for?</p>
+
+                        <div class="platform-grid" id="platformGrid">
+                            <button class="platform-card" type="button" data-platform="instagram">
+                                <div class="platform-icon">📷</div>
+                                <div class="platform-name">Instagram</div>
+                                <div class="platform-formats">Post • Carousel • Reel</div>
+                            </button>
+                            <button class="platform-card" type="button" data-platform="tiktok">
+                                <div class="platform-icon">🎵</div>
+                                <div class="platform-name">TikTok</div>
+                                <div class="platform-formats">Video Script • Hook</div>
+                            </button>
+                            <button class="platform-card" type="button" data-platform="linkedin">
+                                <div class="platform-icon">💼</div>
+                                <div class="platform-name">LinkedIn</div>
+                                <div class="platform-formats">Post • Article</div>
+                            </button>
+                            <button class="platform-card" type="button" data-platform="blog">
+                                <div class="platform-icon">📝</div>
+                                <div class="platform-name">Blog Post</div>
+                                <div class="platform-formats">Article • Guide</div>
+                            </button>
+                            <button class="platform-card" type="button" data-platform="email">
+                                <div class="platform-icon">✉️</div>
+                                <div class="platform-name">Email</div>
+                                <div class="platform-formats">Newsletter • Digest</div>
+                            </button>
+                            <button class="platform-card" type="button" data-platform="twitter">
+                                <div class="platform-icon">𝕏</div>
+                                <div class="platform-name">Twitter</div>
+                                <div class="platform-formats">Thread • Single Post</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="step2Source" class="wizard-step-content hidden">
+                        <h3>Select Content Source</h3>
+                        <p class="help-text" id="sourceSubtitle">What should Phone Studio use for this draft?</p>
+
+                        <div class="source-options">
+                            <div class="source-option">
+                                <h4>Use Existing Content</h4>
+                                <div class="source-buttons">
+                                    <button id="randomSourceBtn" class="btn btn-secondary" type="button">🎲 Random (AI picks best)</button>
+                                    <button id="searchSourceBtn" class="btn btn-secondary" type="button">🔍 Search My Library</button>
+                                    <button id="manualSourceBtn" class="btn btn-secondary" type="button">✋ I'll Select</button>
+                                </div>
+                            </div>
+
+                            <div class="source-option">
+                                <h4>Add More Content</h4>
+                                <div class="source-buttons">
+                                    <button id="uploadMoreBtn" class="btn btn-secondary" type="button">📸 Upload Images</button>
+                                    <button id="recordMoreBtn" class="btn btn-secondary" type="button">🎙️ Record Memo</button>
+                                </div>
+                            </div>
+
+                            <div class="source-option">
+                                <h4>Combine Content</h4>
+                                <p class="help-text">Select multiple photos and memos together.</p>
+                                <button id="combineSourceBtn" class="btn btn-secondary" type="button">🔗 Combine Photos + Memos</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="step2BSearch" class="wizard-step-content hidden">
+                        <h3>Search Your Library</h3>
+                        <p class="help-text">Search by topic and choose the items that should drive this draft.</p>
+                        <input type="text" id="contentSearchInput" class="select" placeholder="e.g. credit, growth, finance">
+                        <div id="searchResultsForContent" class="search-results-compact hidden">
+                            <p class="help-text">Found <strong id="contentSearchCount">0</strong> items</p>
+                            <div id="contentSearchItems" class="content-search-items"></div>
+                        </div>
+                    </div>
+
+                    <div id="step2CManual" class="wizard-step-content hidden">
+                        <h3>Select Content</h3>
+                        <p class="help-text">Choose one or more items to include in the draft.</p>
+                        <div class="content-selection-grid" id="contentSelectionGrid"></div>
+                        <p id="selectionCount" class="help-text"><strong>0</strong> items selected</p>
+                    </div>
+
+                    <div id="step3Generate" class="wizard-step-content hidden">
+                        <h3>Generating Content</h3>
+                        <p class="help-text">Creating optimized content for <span id="generatedPlatform">platform</span>...</p>
+                        <div class="generation-progress">
+                            <div class="progress-bar">
+                                <div id="generationProgress" class="progress-fill wizard-progress-fill" style="width: 0%"></div>
+                            </div>
+                            <p id="generationStatus" class="help-text">Analyzing content...</p>
+                        </div>
+                    </div>
+
+                    <div id="step4Review" class="wizard-step-content hidden">
+                        <h3>Review Generated Content</h3>
+                        <div class="generated-content-display">
+                            <div id="generatedContentPreview" class="content-preview"></div>
+                            <div class="content-actions">
+                                <textarea id="editableContent" class="textarea" placeholder="Edit content if needed..." style="min-height: 200px;"></textarea>
+                                <button id="copyGeneratedContentBtn" class="btn btn-secondary" type="button">📋 Copy Draft</button>
+                                <button id="downloadGeneratedContentBtn" class="btn btn-outline" type="button">📥 Download Draft</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="wizard-footer">
+                        <button id="prevBtn" class="btn btn-outline" type="button">← Back</button>
+                        <button id="nextBtn" class="btn btn-primary" type="button">Next →</button>
+                        <button id="closeWizardBtn" class="btn btn-outline" type="button">✕ Cancel</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- Step 1: Screenshot Upload -->
             <section class="panel screenshot-panel" id="screenshotPanel">
