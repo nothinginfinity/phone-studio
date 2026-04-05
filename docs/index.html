@@ -16,14 +16,100 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
+            <div class="header-badge-row">
+                <span class="app-badge">iPhone-First PWA</span>
+                <span class="app-badge app-badge-secondary" id="installStateBadge">Safari Mode</span>
+            </div>
             <h1>📱 Phone Studio</h1>
-            <p class="subtitle">Screenshot → Text → Content</p>
+            <p class="subtitle">Record ideas, capture screenshots, and turn them into usable content.</p>
         </header>
 
         <!-- Main Control Panel -->
         <main class="main">
+            <section class="panel install-panel hidden" id="installPrompt">
+                <div class="install-panel-header">
+                    <div>
+                        <h2>Install Phone Studio</h2>
+                        <p class="help-text">Add it to your Home Screen so it opens like a real iPhone app.</p>
+                    </div>
+                    <button id="dismissInstallPromptBtn" class="btn btn-outline btn-inline" type="button">Dismiss</button>
+                </div>
+
+                <div class="install-steps">
+                    <div class="install-step-card">
+                        <strong>1. Open in Safari</strong>
+                        <p class="help-text">Home Screen install works best from Safari on iPhone.</p>
+                    </div>
+                    <div class="install-step-card">
+                        <strong>2. Tap Share</strong>
+                        <p class="help-text">Use Safari’s share button at the bottom of the screen.</p>
+                    </div>
+                    <div class="install-step-card">
+                        <strong>3. Add to Home Screen</strong>
+                        <p class="help-text">Name it `Phone Studio` and launch it from the Home Screen.</p>
+                    </div>
+                </div>
+
+                <div class="launcher-tip">
+                    <strong>Fast Launch Tip</strong>
+                    <p class="help-text">Optional: create a Shortcut that opens `https://nothinginfinity.github.io/phone-studio/`, then assign that Shortcut to the Action Button or Lock Screen for one-tap launch.</p>
+                </div>
+            </section>
+
+            <section class="panel app-home-panel" id="appHomePanel">
+                <div class="app-home-hero">
+                    <div>
+                        <p class="eyebrow">Home</p>
+                        <h2>Open fast. Capture fast. Keep moving.</h2>
+                        <p class="help-text">Use the buttons below like an app dashboard: jump straight into recording, screenshots, search, or your memo library.</p>
+                    </div>
+                    <div class="home-status-stack">
+                        <div class="home-status-chip">
+                            <span class="home-status-label">Active LLM</span>
+                            <strong id="dashboardActiveProvider">Groq</strong>
+                        </div>
+                        <div class="home-status-chip">
+                            <span class="home-status-label">Library</span>
+                            <strong><span id="dashboardPhotoCount">0</span> photos</strong>
+                        </div>
+                        <div class="home-status-chip">
+                            <span class="home-status-label">Voice Memos</span>
+                            <strong><span id="dashboardMemoCount">0</span> memos</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="quick-launch-grid">
+                    <button id="quickRecordBtn" class="quick-launch-card quick-launch-card-accent" type="button">
+                        <span class="quick-launch-icon">🎙️</span>
+                        <span class="quick-launch-title">Record Now</span>
+                        <span class="quick-launch-copy">Start or stop a voice note without hunting through the workflow.</span>
+                    </button>
+                    <button id="quickScreenshotBtn" class="quick-launch-card" type="button">
+                        <span class="quick-launch-icon">📷</span>
+                        <span class="quick-launch-title">Upload Screenshot</span>
+                        <span class="quick-launch-copy">Jump straight to screenshot import.</span>
+                    </button>
+                    <button id="quickSearchBtn" class="quick-launch-card" type="button">
+                        <span class="quick-launch-icon">🔎</span>
+                        <span class="quick-launch-title">Search Library</span>
+                        <span class="quick-launch-copy">Open semantic search across photos and memos.</span>
+                    </button>
+                    <button id="quickVoiceHubBtn" class="quick-launch-card" type="button">
+                        <span class="quick-launch-icon">☁️</span>
+                        <span class="quick-launch-title">Voice Memo Hub</span>
+                        <span class="quick-launch-copy">Jump to voice memo imports, iCloud checks, and recent memos.</span>
+                    </button>
+                </div>
+
+                <div class="launcher-tip launcher-tip-secondary">
+                    <strong>Launcher Setup</strong>
+                    <p class="help-text">Best setup on iPhone: Add to Home Screen first. Optional next step: use a Shortcut to open Phone Studio and assign it to Action Button, Back Tap, or the Lock Screen.</p>
+                </div>
+            </section>
+
             <!-- Step 1: Screenshot Upload -->
-            <section class="panel screenshot-panel">
+            <section class="panel screenshot-panel" id="screenshotPanel">
                 <h2>Step 1: Screenshot</h2>
                 <div class="file-input-wrapper">
                     <input type="file" id="screenshotInput" accept="image/*" class="hidden-input">
@@ -35,7 +121,7 @@
             </section>
 
             <!-- Voice Recording Linking -->
-            <section class="panel voice-panel">
+            <section class="panel voice-panel" id="voiceRecorderPanel">
                 <h2>Step 1B: Link Voice Recording (Optional)</h2>
                 <div class="voice-controls">
                     <button id="recordVoiceBtn" class="btn btn-secondary">
@@ -209,7 +295,7 @@
             </section>
 
             <!-- BATCH PROCESSOR SECTION -->
-            <section class="panel batch-processor-panel">
+            <section class="panel batch-processor-panel" id="batchProcessorPanel">
                 <h2>📦 Batch Photo Processor</h2>
                 <p class="help-text">Process multiple screenshots at once. Choose 10-50 photos and we'll index them all.</p>
 
@@ -754,6 +840,13 @@
                 </div>
             </section>
         </main>
+
+        <nav class="quick-dock" aria-label="Phone Studio quick navigation">
+            <button id="dockHomeBtn" class="quick-dock-btn" type="button">Home</button>
+            <button id="dockRecordBtn" class="quick-dock-btn quick-dock-btn-primary" type="button">Record</button>
+            <button id="dockSearchBtn" class="quick-dock-btn" type="button">Search</button>
+            <button id="dockLibraryBtn" class="quick-dock-btn" type="button">Library</button>
+        </nav>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>

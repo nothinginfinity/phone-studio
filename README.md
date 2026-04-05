@@ -82,6 +82,16 @@ BYOK model:
 - You control which provider is active for content generation
 - Existing legacy keys are migrated forward automatically
 
+## iPhone App-Like UX
+
+Phone Studio now includes an iPhone-first home dashboard designed to feel closer to a native app while it still ships as a PWA.
+
+- Fast `Record`, `Upload Screenshot`, `Search`, and `Voice Memo Hub` launch cards
+- Home Screen install prompt for first-run Safari sessions
+- Sticky quick dock for one-tap navigation on iPhone
+- Larger voice-record controls and a more prominent recording entry point
+- Optional launcher guidance for using a Shortcut or Action Button to open Phone Studio quickly
+
 ## V1.5 Features
 
 - Screenshot capture plus OCR extraction

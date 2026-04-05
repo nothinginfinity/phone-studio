@@ -1,5 +1,14 @@
 # Phone Studio Versions
 
+## iPhone UX Pass - App-Like Home & Install Guidance
+
+**New Features:**
+- App-style home dashboard with quick-launch cards
+- First-run install prompt for Add to Home Screen on iPhone
+- Sticky quick dock for Home, Record, Search, and Library
+- Larger and more prominent voice recording entry point
+- Optional fast-launch guidance for Shortcut / Action Button setup
+
 ## V3.1 Enhanced - iCloud Voice Memo Export + Import
 
 **New Features:**

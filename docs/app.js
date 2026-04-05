@@ -930,6 +930,84 @@ function getProviderConfig(provider) {
     return LLM_PROVIDERS[provider] || LLM_PROVIDERS[CONFIG.defaultProvider];
 }
 
+function isIOSDevice() {
+    const userAgent = navigator.userAgent || '';
+    return /iPhone|iPad|iPod/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function updateInstallExperience() {
+    const standalone = isStandaloneMode();
+    const dismissed = localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) === 'true';
+    const shouldShowInstallPrompt = isIOSDevice() && !standalone && !dismissed;
+
+    elements.installPrompt.classList.toggle('hidden', !shouldShowInstallPrompt);
+    elements.installStateBadge.textContent = standalone ? 'Installed' : 'Safari Mode';
+    elements.installStateBadge.classList.toggle('app-badge-secondary', !standalone);
+}
+
+async function updateHomeDashboard() {
+    const active = ApiKeyManager.getActive();
+    const provider = getProviderConfig(active.provider);
+    elements.dashboardActiveProvider.textContent = provider.name;
+
+    try {
+        const [photos, memos] = await Promise.all([
+            BatchDB.getAll().catch(() => []),
+            VoiceMemoDB.getAll().catch(() => [])
+        ]);
+
+        elements.dashboardPhotoCount.textContent = String(photos.length);
+        elements.dashboardMemoCount.textContent = String(memos.length);
+    } catch (error) {
+        console.error('Dashboard update failed:', error);
+    }
+}
+
+function scrollToPanel(panel) {
+    if (!panel) return;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    highlightPanel(panel);
+}
+
+function highlightPanel(panel) {
+    if (!panel) return;
+    panel.classList.add('panel-highlight');
+    window.setTimeout(() => panel.classList.remove('panel-highlight'), 1500);
+}
+
+async function openQuickRecorder() {
+    scrollToPanel(elements.voiceRecorderPanel);
+
+    if (mediaRecorder?.state === 'recording') {
+        stopVoiceRecording();
+        return;
+    }
+
+    await startVoiceRecording();
+}
+
+function openQuickSearch() {
+    switchBatchTab('search');
+    scrollToPanel(elements.batchProcessorPanel);
+    window.setTimeout(() => {
+        elements.searchInput.focus({ preventScroll: true });
+    }, 300);
+}
+
+function openQuickLibrary() {
+    switchBatchTab('library');
+    scrollToPanel(elements.batchProcessorPanel);
+}
+
+function openQuickVoiceHub() {
+    switchBatchTab('voiceMemos');
+    scrollToPanel(elements.batchProcessorPanel);
+}
+
 function providerSupportsChat(provider) {
     return getProviderConfig(provider).supportsChat !== false;
 }
@@ -1132,6 +1210,7 @@ let db = null;
 let mediaRecorder = null;
 let mediaStream = null;
 let audioChunks = [];
+const INSTALL_PROMPT_DISMISSED_KEY = 'phoneStudioInstallPromptDismissed';
 
 let state = {
     screenshot: null,
@@ -1154,6 +1233,24 @@ let state = {
 };
 
 const elements = {
+    installStateBadge: document.getElementById('installStateBadge'),
+    installPrompt: document.getElementById('installPrompt'),
+    dismissInstallPromptBtn: document.getElementById('dismissInstallPromptBtn'),
+    dashboardActiveProvider: document.getElementById('dashboardActiveProvider'),
+    dashboardPhotoCount: document.getElementById('dashboardPhotoCount'),
+    dashboardMemoCount: document.getElementById('dashboardMemoCount'),
+    quickRecordBtn: document.getElementById('quickRecordBtn'),
+    quickScreenshotBtn: document.getElementById('quickScreenshotBtn'),
+    quickSearchBtn: document.getElementById('quickSearchBtn'),
+    quickVoiceHubBtn: document.getElementById('quickVoiceHubBtn'),
+    dockHomeBtn: document.getElementById('dockHomeBtn'),
+    dockRecordBtn: document.getElementById('dockRecordBtn'),
+    dockSearchBtn: document.getElementById('dockSearchBtn'),
+    dockLibraryBtn: document.getElementById('dockLibraryBtn'),
+    appHomePanel: document.getElementById('appHomePanel'),
+    screenshotPanel: document.getElementById('screenshotPanel'),
+    voiceRecorderPanel: document.getElementById('voiceRecorderPanel'),
+    batchProcessorPanel: document.getElementById('batchProcessorPanel'),
     uploadBtn: document.getElementById('uploadBtn'),
     screenshotInput: document.getElementById('screenshotInput'),
     imagePreview: document.getElementById('imagePreview'),
@@ -1313,6 +1410,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCurrentProvider();
     updateSavedKeysList();
     updateEndpointDebug(activeProvider);
+    updateInstallExperience();
+    updateHomeDashboard();
 
     initEventListeners();
     registerServiceWorker();
@@ -1324,6 +1423,29 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initEventListeners() {
+    elements.dismissInstallPromptBtn.addEventListener('click', () => {
+        localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, 'true');
+        updateInstallExperience();
+    });
+    elements.quickRecordBtn.addEventListener('click', openQuickRecorder);
+    elements.quickScreenshotBtn.addEventListener('click', () => {
+        scrollToPanel(elements.screenshotPanel);
+        elements.uploadBtn.click();
+    });
+    elements.quickSearchBtn.addEventListener('click', openQuickSearch);
+    elements.quickVoiceHubBtn.addEventListener('click', openQuickVoiceHub);
+    elements.dockHomeBtn.addEventListener('click', () => {
+        scrollToPanel(elements.appHomePanel);
+    });
+    elements.dockRecordBtn.addEventListener('click', openQuickRecorder);
+    elements.dockSearchBtn.addEventListener('click', openQuickSearch);
+    elements.dockLibraryBtn.addEventListener('click', openQuickLibrary);
+    window.addEventListener('pageshow', updateInstallExperience);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            updateInstallExperience();
+        }
+    });
     elements.uploadBtn.addEventListener('click', () => {
         elements.screenshotInput.click();
     });
@@ -1835,6 +1957,8 @@ async function updateVoiceLibraryDisplay() {
     } catch (error) {
         console.error('Voice library display failed:', error);
     }
+
+    updateHomeDashboard();
 }
 
 async function processOnePhoto(file, options, index, total) {
@@ -2314,6 +2438,8 @@ async function updateLibraryDisplay() {
     } catch (error) {
         console.error('Library display failed:', error);
     }
+
+    updateHomeDashboard();
 }
 
 function escapeHtml(value) {
@@ -2382,6 +2508,24 @@ function updateVoiceButtons(isRecording) {
         : '🎙️ Record Voice (Hold to Record)';
     elements.stopRecordBtn.style.display = isRecording ? 'inline-block' : 'none';
     elements.stopRecordBtn.disabled = !isRecording;
+
+    if (elements.quickRecordBtn) {
+        const title = elements.quickRecordBtn.querySelector('.quick-launch-title');
+        const copy = elements.quickRecordBtn.querySelector('.quick-launch-copy');
+        elements.quickRecordBtn.classList.toggle('quick-launch-card-live', isRecording);
+        if (title) {
+            title.textContent = isRecording ? 'Stop Recording' : 'Record Now';
+        }
+        if (copy) {
+            copy.textContent = isRecording
+                ? 'Recording is active. Tap again to stop and save the note.'
+                : 'Start or stop a voice note without hunting through the workflow.';
+        }
+    }
+
+    if (elements.dockRecordBtn) {
+        elements.dockRecordBtn.textContent = isRecording ? 'Stop' : 'Record';
+    }
 }
 
 async function ensureMediaRecorder() {
@@ -3155,6 +3299,7 @@ async function checkLLMStatus() {
 
     updateCurrentProvider();
     updateEndpointDebug(provider);
+    updateHomeDashboard();
 }
 
 function updateTesseractStatus() {
