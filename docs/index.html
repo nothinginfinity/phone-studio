@@ -233,6 +233,7 @@
                             <div id="generatedContentPreview" class="content-preview"></div>
                             <div class="content-actions">
                                 <textarea id="editableContent" class="textarea" placeholder="Edit content if needed..." style="min-height: 200px;"></textarea>
+                                <button id="polishDraftBtn" class="btn btn-secondary" type="button">✨ Polish Draft</button>
                                 <button id="saveDraftBtn" class="btn btn-primary" type="button">💾 Save to Review Queue</button>
                                 <button id="approveDraftBtn" class="btn btn-accent" type="button">✅ Save as Approved</button>
                                 <button id="copyGeneratedContentBtn" class="btn btn-secondary" type="button">📋 Copy Draft</button>
@@ -667,6 +668,7 @@
                         <textarea id="reviewDraftEditor" class="textarea" placeholder="Edit approved content here..." style="min-height: 220px;"></textarea>
 
                         <div class="review-editor-actions">
+                            <button id="polishReviewDraftBtn" class="btn btn-secondary" type="button">✨ Polish Draft</button>
                             <button id="saveReviewDraftBtn" class="btn btn-primary" type="button">💾 Save Changes</button>
                             <button id="approveReviewDraftBtn" class="btn btn-accent" type="button">✅ Mark Approved</button>
                             <button id="moveToPendingBtn" class="btn btn-outline" type="button">↩️ Move to Pending</button>
@@ -1002,6 +1004,64 @@
                 <div class="settings-section">
                     <h3>Saved API Keys</h3>
                     <div id="savedKeysList" class="saved-keys-list"></div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Creator Profile</h3>
+                    <p class="help-text">Phone Studio can use this info to clean up emails, blogs, and polished drafts automatically.</p>
+
+                    <div class="profile-grid">
+                        <div class="api-input-section">
+                            <label for="profileNameInput">Name</label>
+                            <input type="text" id="profileNameInput" class="select" placeholder="Your name">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileBrandInput">Brand / Company</label>
+                            <input type="text" id="profileBrandInput" class="select" placeholder="Business or brand name">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileTitleInput">Role / Title</label>
+                            <input type="text" id="profileTitleInput" class="select" placeholder="Founder, Consultant, etc.">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileEmailInput">Email</label>
+                            <input type="email" id="profileEmailInput" class="select" placeholder="you@example.com">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileWebsiteInput">Website</label>
+                            <input type="text" id="profileWebsiteInput" class="select" placeholder="yourwebsite.com">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profilePhoneInput">Phone</label>
+                            <input type="text" id="profilePhoneInput" class="select" placeholder="Optional phone number">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileInstagramInput">Instagram Handle</label>
+                            <input type="text" id="profileInstagramInput" class="select" placeholder="@yourhandle">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileLinkedinInput">LinkedIn Handle</label>
+                            <input type="text" id="profileLinkedinInput" class="select" placeholder="linkedin.com/in/you or @handle">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileXInput">X / Twitter Handle</label>
+                            <input type="text" id="profileXInput" class="select" placeholder="@yourhandle">
+                        </div>
+                        <div class="api-input-section">
+                            <label for="profileCtaInput">Default CTA</label>
+                            <input type="text" id="profileCtaInput" class="select" placeholder="Book a call, reply to this email, etc.">
+                        </div>
+                    </div>
+
+                    <div class="api-input-section">
+                        <label for="profileBioInput">Short Bio / Signature</label>
+                        <textarea id="profileBioInput" class="textarea textarea-small" placeholder="Short signature, positioning statement, or callout to use in polished drafts."></textarea>
+                    </div>
+
+                    <div class="profile-actions">
+                        <button id="saveProfileBtn" class="btn btn-primary" type="button">💾 Save Creator Profile</button>
+                        <button id="clearProfileBtn" class="btn btn-outline" type="button">🗑️ Clear Profile</button>
+                    </div>
                 </div>
 
                 <div class="settings-section settings-info">

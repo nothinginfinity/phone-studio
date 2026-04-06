@@ -1,4 +1,4 @@
-const CACHE_NAME = 'phone-studio-v5-1-review-queue';
+const CACHE_NAME = 'phone-studio-v5-2-polish-profile';
 const APP_SHELL = [
   './',
   './index.html',

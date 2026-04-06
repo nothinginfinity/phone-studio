@@ -144,6 +144,15 @@ Phone Studio now supports a local approval workflow that stays fully on-device a
 
 This gives Phone Studio a usable local publishing pipeline even while Instagram automation remains unverified.
 
+## Creator Profile + Polish
+
+Phone Studio now includes a local `Creator Profile` in Settings plus a `Polish Draft` action in the content workflow.
+
+- Save your name, brand, title, email, website, social handles, CTA, and short bio once
+- Phone Studio can use that profile when generating or polishing emails, blogs, and other drafts
+- `Polish Draft` removes odd markdown-style formatting and tries to convert rough output into clean plain text
+- If an LLM provider is active, polish uses the model first and falls back to local cleanup if needed
+
 ## V1.5 Features
 
 - Screenshot capture plus OCR extraction

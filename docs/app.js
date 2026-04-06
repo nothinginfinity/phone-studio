@@ -361,6 +361,54 @@ const ApiKeyManager = {
     }
 };
 
+const ProfileManager = {
+    storageKey: 'phoneStudioCreatorProfile',
+
+    defaultProfile() {
+        return {
+            name: '',
+            brand: '',
+            title: '',
+            email: '',
+            website: '',
+            phone: '',
+            instagram: '',
+            linkedin: '',
+            x: '',
+            cta: '',
+            bio: ''
+        };
+    },
+
+    getProfile() {
+        const stored = localStorage.getItem(this.storageKey);
+        if (!stored) {
+            return this.defaultProfile();
+        }
+
+        try {
+            return {
+                ...this.defaultProfile(),
+                ...(JSON.parse(stored) || {})
+            };
+        } catch (error) {
+            console.warn('Failed to parse creator profile:', error);
+            return this.defaultProfile();
+        }
+    },
+
+    saveProfile(profile) {
+        localStorage.setItem(this.storageKey, JSON.stringify({
+            ...this.defaultProfile(),
+            ...profile
+        }));
+    },
+
+    clearProfile() {
+        localStorage.removeItem(this.storageKey);
+    }
+};
+
 const BatchDB = {
     dbName: BATCH_DB_NAME,
     storeName: 'processed_photos',
@@ -1388,17 +1436,20 @@ function buildContentPrompt(selectedContent, platform) {
     const contentSummary = selectedContent
         .map((item, index) => `Source ${index + 1}\n${summariseWizardSource(item)}`)
         .join('\n\n');
+    const profileContext = buildCreatorProfileContext();
 
     const platformPrompts = {
-        instagram: `Create an engaging Instagram caption based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Strong hook in the opening line\n- Use relevant emojis sparingly\n- Include 3-5 hashtags\n- Keep it under 200 words\n- End with a call to action`,
-        tiktok: `Create a TikTok script and hook based on this source material.\n\n${contentSummary}\n\nRequirements:\n- First 3 seconds must grab attention\n- 30-60 second script structure\n- Include 3 concrete points\n- End with a clear CTA`,
-        linkedin: `Create a professional LinkedIn post based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Start with a compelling insight\n- 200-300 words\n- Professional but conversational tone\n- Include 1-2 concrete takeaways\n- End with an engagement question`,
-        blog: `Create a blog post outline based on this source material.\n\n${contentSummary}\n\nRequirements:\n- SEO-friendly title\n- 5-section outline with subheadings\n- Include examples or proof points\n- End with a call to action`,
-        email: `Create an email newsletter draft based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Subject line under 50 characters\n- Preview text\n- Clear structure with 3-4 key insights\n- Include a strong CTA`,
-        twitter: `Create a Twitter/X thread based on this source material.\n\n${contentSummary}\n\nRequirements:\n- 5-7 connected tweets\n- Use 1/, 2/, etc.\n- Keep each post under 280 characters\n- End with engagement or CTA`
+        instagram: `Create an engaging Instagram caption based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Strong hook in the opening line\n- Use relevant emojis sparingly\n- Include 3-5 hashtags\n- Keep it under 200 words\n- End with a call to action\n- Return clean plain text only, not markdown`,
+        tiktok: `Create a TikTok script and hook based on this source material.\n\n${contentSummary}\n\nRequirements:\n- First 3 seconds must grab attention\n- 30-60 second script structure\n- Include 3 concrete points\n- End with a clear CTA\n- Return clean plain text only, not markdown`,
+        linkedin: `Create a professional LinkedIn post based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Start with a compelling insight\n- 200-300 words\n- Professional but conversational tone\n- Include 1-2 concrete takeaways\n- End with an engagement question\n- Use the creator profile when appropriate\n- Return clean plain text only, not markdown`,
+        blog: `Create a blog post outline based on this source material.\n\n${contentSummary}\n\nRequirements:\n- SEO-friendly title\n- 5-section outline with subheadings\n- Include examples or proof points\n- End with a call to action\n- Use the creator profile when appropriate\n- Return clean plain text only, not markdown`,
+        email: `Create an email newsletter draft based on this source material.\n\n${contentSummary}\n\nRequirements:\n- Subject line under 50 characters\n- Preview text\n- Clear structure with 3-4 key insights\n- Include a strong CTA\n- Use the creator profile for signature or sender details where appropriate\n- Return clean plain text only, not markdown`,
+        twitter: `Create a Twitter/X thread based on this source material.\n\n${contentSummary}\n\nRequirements:\n- 5-7 connected tweets\n- Use 1/, 2/, etc.\n- Keep each post under 280 characters\n- End with engagement or CTA\n- Return clean plain text only, not markdown`
     };
 
-    return platformPrompts[platform] || platformPrompts.instagram;
+    return [platformPrompts[platform] || platformPrompts.instagram, profileContext]
+        .filter(Boolean)
+        .join('\n\n');
 }
 
 function buildDraftTitle(platform, content) {
@@ -1426,6 +1477,142 @@ function buildDraftSources(items) {
             summary: summary || 'No summary available.'
         };
     });
+}
+
+function getCreatorProfile() {
+    return ProfileManager.getProfile();
+}
+
+function hasCreatorProfile(profile = getCreatorProfile()) {
+    return Object.values(profile).some((value) => String(value || '').trim().length > 0);
+}
+
+function buildCreatorProfileContext(profile = getCreatorProfile()) {
+    if (!hasCreatorProfile(profile)) {
+        return '';
+    }
+
+    const lines = [];
+    if (profile.name) lines.push(`Name: ${profile.name}`);
+    if (profile.brand) lines.push(`Brand: ${profile.brand}`);
+    if (profile.title) lines.push(`Role: ${profile.title}`);
+    if (profile.email) lines.push(`Email: ${profile.email}`);
+    if (profile.website) lines.push(`Website: ${profile.website}`);
+    if (profile.phone) lines.push(`Phone: ${profile.phone}`);
+    if (profile.instagram) lines.push(`Instagram: ${profile.instagram}`);
+    if (profile.linkedin) lines.push(`LinkedIn: ${profile.linkedin}`);
+    if (profile.x) lines.push(`X/Twitter: ${profile.x}`);
+    if (profile.cta) lines.push(`Preferred CTA: ${profile.cta}`);
+    if (profile.bio) lines.push(`Bio: ${profile.bio}`);
+
+    return `Creator profile to use when appropriate:\n${lines.join('\n')}`;
+}
+
+function extractLabeledSection(content, labels) {
+    const normalized = content.replace(/\r\n/g, '\n');
+    for (const label of labels) {
+        const pattern = new RegExp(`(?:^|\\n)${label}\\s*:?\\s*(.+)`, 'i');
+        const match = normalized.match(pattern);
+        if (match?.[1]) {
+            return match[1].trim();
+        }
+    }
+    return '';
+}
+
+function appendSignatureIfMissing(content, profile, platform) {
+    if (!hasCreatorProfile(profile)) {
+        return content.trim();
+    }
+
+    const normalized = content.trim();
+    if (platform !== 'email' && platform !== 'blog' && platform !== 'linkedin') {
+        return normalized;
+    }
+
+    const signatureBits = [
+        profile.name,
+        profile.title,
+        profile.brand
+    ].filter(Boolean);
+
+    const contactBits = [
+        profile.email,
+        profile.phone,
+        profile.website
+    ].filter(Boolean);
+
+    const socialBits = [
+        profile.instagram,
+        profile.linkedin,
+        profile.x
+    ].filter(Boolean);
+
+    if (signatureBits.length === 0 && contactBits.length === 0 && socialBits.length === 0 && !profile.bio) {
+        return normalized;
+    }
+
+    const signatureLines = [
+        signatureBits.join(' • '),
+        profile.bio,
+        contactBits.join(' • '),
+        socialBits.join(' • ')
+    ].filter(Boolean);
+
+    if (signatureLines.some((line) => normalized.toLowerCase().includes(line.toLowerCase()))) {
+        return normalized;
+    }
+
+    const closing = platform === 'email' ? 'Best,' : 'Written by';
+    return `${normalized}\n\n${closing}\n${signatureLines.join('\n')}`;
+}
+
+function cleanupDraftFormatting(content, platform, profile = getCreatorProfile()) {
+    if (!content) {
+        return '';
+    }
+
+    let cleaned = content
+        .replace(/\r\n/g, '\n')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/^#{1,6}\s*/gm, '')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+    cleaned = cleaned
+        .replace(/^subject\s*:\s*/im, 'Subject: ')
+        .replace(/^preview text\s*:\s*/im, 'Preview Text: ')
+        .replace(/^preheader\s*:\s*/im, 'Preview Text: ');
+
+    cleaned = cleaned
+        .replace(/\[your name\]|\{\{name\}\}/gi, profile.name || '')
+        .replace(/\[your company\]|\{\{brand\}\}/gi, profile.brand || '')
+        .replace(/\[your email\]|\{\{email\}\}/gi, profile.email || '')
+        .replace(/\[your website\]|\{\{website\}\}/gi, profile.website || '')
+        .replace(/\[your instagram\]|\{\{instagram\}\}/gi, profile.instagram || '')
+        .replace(/\[your linkedin\]|\{\{linkedin\}\}/gi, profile.linkedin || '')
+        .replace(/\[your x\]|\{\{x\}\}/gi, profile.x || '')
+        .replace(/\[your cta\]|\{\{cta\}\}/gi, profile.cta || '');
+
+    if (platform === 'email') {
+        const subject = extractLabeledSection(cleaned, ['subject']);
+        const preview = extractLabeledSection(cleaned, ['preview text', 'preheader']);
+        const body = cleaned
+            .replace(/(?:^|\n)subject\s*:.*$/gim, '')
+            .replace(/(?:^|\n)(preview text|preheader)\s*:.*$/gim, '')
+            .trim();
+
+        const emailSections = [];
+        if (subject) emailSections.push(`Subject: ${subject}`);
+        if (preview) emailSections.push(`Preview Text: ${preview}`);
+        emailSections.push(appendSignatureIfMissing(body, profile, platform));
+        cleaned = emailSections.filter(Boolean).join('\n\n');
+    } else {
+        cleaned = appendSignatureIfMissing(cleaned, profile, platform);
+    }
+
+    return cleaned.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 async function saveGeneratedDraft(approvalState = 'pending_review') {
@@ -1560,6 +1747,88 @@ async function handleApproveDraft() {
     showStatus(elements.llmStatus, '✓ Draft saved as approved', 'success');
 }
 
+async function polishDraftContent(content, platform) {
+    const cleaned = cleanupDraftFormatting(content, platform);
+    const { provider, apiKey } = ApiKeyManager.getActive();
+
+    if (!apiKey || !providerSupportsChat(provider)) {
+        return cleaned;
+    }
+
+    try {
+        const profileContext = buildCreatorProfileContext();
+        const polished = await requestLLM({
+            provider,
+            apiKey,
+            systemPrompt: 'You are an expert editor. Clean up formatting, preserve meaning, remove markdown artifacts, and return polished plain text only.',
+            userPrompt: [
+                `Polish this ${getPlatformLabel(platform || 'content')} draft.`,
+                'Requirements:',
+                '- Remove markdown artifacts like **, headings, and awkward labels unless they are useful',
+                '- Preserve all important meaning',
+                '- Keep the tone polished and ready to send or post',
+                '- Use the creator profile where appropriate, but do not invent missing facts',
+                '- Return plain text only',
+                profileContext,
+                'Draft:',
+                cleaned
+            ].filter(Boolean).join('\n\n'),
+            temperature: 0.35,
+            maxTokens: 1400,
+            timeout: CONFIG.timeout
+        });
+
+        return cleanupDraftFormatting(polished || cleaned, platform);
+    } catch (error) {
+        console.error('Draft polish failed:', error);
+        return cleaned;
+    }
+}
+
+async function handlePolishGeneratedDraft() {
+    const content = elements.editableContent.value.trim();
+    if (!content) {
+        showStatus(elements.llmStatus, '✗ No draft to polish yet', 'error');
+        return;
+    }
+
+    elements.polishDraftBtn.disabled = true;
+    showStatus(elements.llmStatus, '✨ Polishing draft...', 'loading');
+    try {
+        const polished = await polishDraftContent(content, contentWizardState.platform);
+        elements.editableContent.value = polished;
+        elements.generatedContentPreview.textContent = polished;
+        contentWizardState.generatedContent = polished;
+        showStatus(elements.llmStatus, '✓ Draft polished', 'success');
+    } finally {
+        elements.polishDraftBtn.disabled = false;
+    }
+}
+
+async function handlePolishReviewDraft() {
+    const content = elements.reviewDraftEditor.value.trim();
+    if (!content || !reviewState.selectedDraftId) {
+        showStatus(elements.batchStatus, '✗ No saved draft selected', 'error');
+        return;
+    }
+
+    const draft = await ContentDraftDB.getById(reviewState.selectedDraftId);
+    if (!draft) {
+        clearReviewEditor();
+        return;
+    }
+
+    elements.polishReviewDraftBtn.disabled = true;
+    showStatus(elements.batchStatus, '✨ Polishing draft...', 'loading');
+    try {
+        const polished = await polishDraftContent(content, draft.platform);
+        elements.reviewDraftEditor.value = polished;
+        showStatus(elements.batchStatus, '✓ Draft polished', 'success');
+    } finally {
+        elements.polishReviewDraftBtn.disabled = false;
+    }
+}
+
 function nextStep() {
     if (contentWizardState.currentStep === 1) {
         if (!contentWizardState.platform) {
@@ -1656,6 +1925,36 @@ function toggleSaveApiKeyButton() {
     const hasProvider = Boolean(elements.providerSelect?.value);
     const hasKey = Boolean(elements.apiKeyInput?.value.trim());
     elements.saveApiKeyBtn.disabled = !(hasProvider && hasKey);
+}
+
+function populateProfileForm(profile = getCreatorProfile()) {
+    elements.profileNameInput.value = profile.name || '';
+    elements.profileBrandInput.value = profile.brand || '';
+    elements.profileTitleInput.value = profile.title || '';
+    elements.profileEmailInput.value = profile.email || '';
+    elements.profileWebsiteInput.value = profile.website || '';
+    elements.profilePhoneInput.value = profile.phone || '';
+    elements.profileInstagramInput.value = profile.instagram || '';
+    elements.profileLinkedinInput.value = profile.linkedin || '';
+    elements.profileXInput.value = profile.x || '';
+    elements.profileCtaInput.value = profile.cta || '';
+    elements.profileBioInput.value = profile.bio || '';
+}
+
+function readProfileForm() {
+    return {
+        name: elements.profileNameInput.value.trim(),
+        brand: elements.profileBrandInput.value.trim(),
+        title: elements.profileTitleInput.value.trim(),
+        email: elements.profileEmailInput.value.trim(),
+        website: elements.profileWebsiteInput.value.trim(),
+        phone: elements.profilePhoneInput.value.trim(),
+        instagram: elements.profileInstagramInput.value.trim(),
+        linkedin: elements.profileLinkedinInput.value.trim(),
+        x: elements.profileXInput.value.trim(),
+        cta: elements.profileCtaInput.value.trim(),
+        bio: elements.profileBioInput.value.trim()
+    };
 }
 
 const SemanticCompressor = {
@@ -1907,6 +2206,7 @@ const elements = {
     generationStatus: document.getElementById('generationStatus'),
     generatedContentPreview: document.getElementById('generatedContentPreview'),
     editableContent: document.getElementById('editableContent'),
+    polishDraftBtn: document.getElementById('polishDraftBtn'),
     saveDraftBtn: document.getElementById('saveDraftBtn'),
     approveDraftBtn: document.getElementById('approveDraftBtn'),
     copyGeneratedContentBtn: document.getElementById('copyGeneratedContentBtn'),
@@ -1981,6 +2281,19 @@ const elements = {
     apiKeyInput: document.getElementById('apiKeyInput'),
     providerInstructions: document.getElementById('providerInstructions'),
     savedKeysList: document.getElementById('savedKeysList'),
+    profileNameInput: document.getElementById('profileNameInput'),
+    profileBrandInput: document.getElementById('profileBrandInput'),
+    profileTitleInput: document.getElementById('profileTitleInput'),
+    profileEmailInput: document.getElementById('profileEmailInput'),
+    profileWebsiteInput: document.getElementById('profileWebsiteInput'),
+    profilePhoneInput: document.getElementById('profilePhoneInput'),
+    profileInstagramInput: document.getElementById('profileInstagramInput'),
+    profileLinkedinInput: document.getElementById('profileLinkedinInput'),
+    profileXInput: document.getElementById('profileXInput'),
+    profileCtaInput: document.getElementById('profileCtaInput'),
+    profileBioInput: document.getElementById('profileBioInput'),
+    saveProfileBtn: document.getElementById('saveProfileBtn'),
+    clearProfileBtn: document.getElementById('clearProfileBtn'),
     showComparisonBtn: document.getElementById('showComparisonBtn'),
     providerComparisonModal: document.getElementById('providerComparisonModal'),
     closeComparisonBtn: document.getElementById('closeComparisonBtn'),
@@ -2038,6 +2351,7 @@ const elements = {
     reviewEditorStatusBadge: document.getElementById('reviewEditorStatusBadge'),
     reviewEditorSources: document.getElementById('reviewEditorSources'),
     reviewDraftEditor: document.getElementById('reviewDraftEditor'),
+    polishReviewDraftBtn: document.getElementById('polishReviewDraftBtn'),
     saveReviewDraftBtn: document.getElementById('saveReviewDraftBtn'),
     approveReviewDraftBtn: document.getElementById('approveReviewDraftBtn'),
     moveToPendingBtn: document.getElementById('moveToPendingBtn'),
@@ -2099,6 +2413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.providerSelect.value = activeProvider;
     elements.apiKeyInput.value = ApiKeyManager.get(activeProvider);
     displayProviderInfo(activeProvider);
+    populateProfileForm();
     toggleSaveApiKeyButton();
     updateCurrentProvider();
     updateSavedKeysList();
@@ -2150,6 +2465,7 @@ function initEventListeners() {
             closeWizard();
         }
     });
+    elements.polishDraftBtn.addEventListener('click', handlePolishGeneratedDraft);
     elements.saveDraftBtn.addEventListener('click', handleSaveDraft);
     elements.approveDraftBtn.addEventListener('click', handleApproveDraft);
     elements.copyGeneratedContentBtn.addEventListener('click', copyGeneratedContent);
@@ -2235,6 +2551,19 @@ function initEventListeners() {
         updateCurrentProvider();
         updateEndpointDebug(providerId);
         checkLLMStatus();
+    });
+
+    elements.saveProfileBtn.addEventListener('click', () => {
+        ProfileManager.saveProfile(readProfileForm());
+        showStatus(elements.llmStatus, '✓ Creator profile saved locally', 'success');
+    });
+    elements.clearProfileBtn.addEventListener('click', () => {
+        if (!confirm('Clear your saved creator profile?')) {
+            return;
+        }
+        ProfileManager.clearProfile();
+        populateProfileForm(ProfileManager.defaultProfile());
+        showStatus(elements.llmStatus, '✓ Creator profile cleared', 'success');
     });
 
     elements.getApiKeyBtn.addEventListener('click', openApiKeyPage);
@@ -2330,6 +2659,7 @@ function initEventListeners() {
         }
     });
     elements.saveReviewDraftBtn.addEventListener('click', saveReviewDraftChanges);
+    elements.polishReviewDraftBtn.addEventListener('click', handlePolishReviewDraft);
     elements.approveReviewDraftBtn.addEventListener('click', () => updateSelectedDraftApprovalState('approved'));
     elements.moveToPendingBtn.addEventListener('click', () => updateSelectedDraftApprovalState('pending_review'));
     elements.exportReviewTxtBtn.addEventListener('click', () => {

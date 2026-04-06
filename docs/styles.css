@@ -881,6 +881,18 @@ body {
     gap: 8px;
 }
 
+.profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.profile-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
 .saved-key-item {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -1980,6 +1992,15 @@ body {
     .platform-grid,
     .content-selection-grid,
     .wizard-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-grid,
+    .profile-actions,
+    .review-stats,
+    .review-filters,
+    .review-card-actions,
+    .review-editor-actions {
         grid-template-columns: 1fr;
     }
 

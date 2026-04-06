@@ -8,6 +8,8 @@
 - Re-open and edit saved drafts later on iPhone
 - Export single drafts as TXT or JSON
 - Export an approved-drafts bundle for manual posting or downstream workflows
+- Creator Profile settings for name, brand, contact, and social handles
+- `Polish Draft` actions for cleaning up awkward formatting before approval/export
 
 **Workflow:**
 1. Generate content in `Create Content`
