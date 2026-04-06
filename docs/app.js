@@ -230,7 +230,7 @@ const CONFIG = {
 };
 
 const BATCH_DB_NAME = 'PhoneStudioBatch';
-const BATCH_DB_VERSION = 2;
+const BATCH_DB_VERSION = 3;
 
 const ApiKeyManager = {
     storageKey: 'phoneStudioApiKeys',
@@ -366,6 +366,7 @@ const BatchDB = {
     storeName: 'processed_photos',
     indexStoreName: 'search_index',
     voiceStoreName: 'voice_memos',
+    draftStoreName: 'content_drafts',
 
     async init() {
         if (!window.idb?.openDB) {
@@ -383,13 +384,22 @@ const BatchDB = {
                 if (!db.objectStoreNames.contains('voice_memos')) {
                     db.createObjectStore('voice_memos', { keyPath: 'id' });
                 }
+                if (!db.objectStoreNames.contains('content_drafts')) {
+                    const draftStore = db.createObjectStore('content_drafts', { keyPath: 'id' });
+                    draftStore.createIndex('approval_state', 'approval_state', { unique: false });
+                    draftStore.createIndex('platform', 'platform', { unique: false });
+                    draftStore.createIndex('updated_at', 'updated_at', { unique: false });
+                }
             }
         });
     },
 
     async savePhoto(photoData) {
         const db = await this.init();
-        await db.put(this.storeName, photoData);
+        await db.put(this.storeName, {
+            approval_state: 'pending_review',
+            ...photoData
+        });
     },
 
     async getAll() {
@@ -429,6 +439,34 @@ const BatchDB = {
     }
 };
 
+const ContentDraftDB = {
+    storeName: BatchDB.draftStoreName,
+
+    async init() {
+        return BatchDB.init();
+    },
+
+    async saveDraft(draftData) {
+        const db = await this.init();
+        await db.put(this.storeName, draftData);
+    },
+
+    async getAll() {
+        const db = await this.init();
+        return db.getAll(this.storeName);
+    },
+
+    async getById(id) {
+        const db = await this.init();
+        return db.get(this.storeName, id);
+    },
+
+    async deleteDraft(id) {
+        const db = await this.init();
+        await db.delete(this.storeName, id);
+    }
+};
+
 let batchState = {
     queue: [],
     currentIndex: 0,
@@ -450,10 +488,14 @@ const contentWizardState = {
     source: null,
     selectedContent: [],
     generatedContent: '',
+    draftId: null,
     searchQuery: '',
     step2Mode: 'source',
     isGenerating: false,
     runId: 0
+};
+const reviewState = {
+    selectedDraftId: null
 };
 
 const VoiceMemoProcessor = {
@@ -473,7 +515,8 @@ const VoiceMemoProcessor = {
                 metadata: {
                     format: file.type,
                     processed_at: new Date().toISOString()
-                }
+                },
+                approval_state: 'pending_review'
             };
 
             await new Promise((resolve) => {
@@ -584,7 +627,10 @@ const VoiceMemoDB = {
 
     async saveMemo(memoData) {
         const db = await this.init();
-        await db.put(this.storeName, memoData);
+        await db.put(this.storeName, {
+            approval_state: 'pending_review',
+            ...memoData
+        });
     },
 
     async getAll() {
@@ -966,13 +1012,19 @@ async function updateHomeDashboard() {
     elements.dashboardActiveProvider.textContent = provider.name;
 
     try {
-        const [photos, memos] = await Promise.all([
+        const [photos, memos, drafts] = await Promise.all([
             BatchDB.getAll().catch(() => []),
-            VoiceMemoDB.getAll().catch(() => [])
+            VoiceMemoDB.getAll().catch(() => []),
+            ContentDraftDB.getAll().catch(() => [])
         ]);
 
         elements.dashboardPhotoCount.textContent = String(photos.length);
         elements.dashboardMemoCount.textContent = String(memos.length);
+        if (elements.dashboardDraftCount) {
+            elements.dashboardDraftCount.textContent = String(
+                drafts.filter((draft) => draft.approval_state === 'pending_review' || draft.approval_state === 'approved').length
+            );
+        }
     } catch (error) {
         console.error('Dashboard update failed:', error);
     }
@@ -1019,12 +1071,18 @@ function openQuickVoiceHub() {
     scrollToPanel(elements.batchProcessorPanel);
 }
 
+function openQuickReviewQueue() {
+    switchBatchTab('review');
+    scrollToPanel(elements.batchProcessorPanel);
+}
+
 function resetContentWizardState() {
     contentWizardState.currentStep = 1;
     contentWizardState.platform = null;
     contentWizardState.source = null;
     contentWizardState.selectedContent = [];
     contentWizardState.generatedContent = '';
+    contentWizardState.draftId = null;
     contentWizardState.searchQuery = '';
     contentWizardState.step2Mode = 'source';
     contentWizardState.isGenerating = false;
@@ -1343,6 +1401,72 @@ function buildContentPrompt(selectedContent, platform) {
     return platformPrompts[platform] || platformPrompts.instagram;
 }
 
+function buildDraftTitle(platform, content) {
+    const firstLine = (content || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .find(Boolean);
+    const label = getPlatformLabel(platform || 'content');
+    return firstLine
+        ? `${label}: ${firstLine}`.substring(0, 96)
+        : `${label} Draft ${new Date().toLocaleDateString()}`;
+}
+
+function buildDraftSources(items) {
+    return items.map((item) => {
+        const type = getWizardItemType(item);
+        const summary = type === 'memo'
+            ? item.summary || (item.raw_transcript || '').slice(0, 180)
+            : item.compressed_index?.summary || (item.raw_text || '').slice(0, 180);
+
+        return {
+            id: item.id,
+            type,
+            file_name: item.file_name || `${type === 'memo' ? 'Memo' : 'Photo'} ${item.id}`,
+            summary: summary || 'No summary available.'
+        };
+    });
+}
+
+async function saveGeneratedDraft(approvalState = 'pending_review') {
+    const content = elements.editableContent.value.trim();
+    if (!content) {
+        showStatus(elements.llmStatus, '✗ Draft is empty. Generate or edit content first.', 'error');
+        return null;
+    }
+
+    const now = new Date().toISOString();
+    const existing = contentWizardState.draftId
+        ? await ContentDraftDB.getById(contentWizardState.draftId)
+        : null;
+    const draftId = existing?.id || `draft_${Date.now()}`;
+    const approval = approvalState || existing?.approval_state || 'pending_review';
+    const draftRecord = {
+        id: draftId,
+        created_at: existing?.created_at || now,
+        updated_at: now,
+        timestamp: existing?.timestamp || now,
+        platform: contentWizardState.platform || existing?.platform || 'content',
+        title: buildDraftTitle(contentWizardState.platform || existing?.platform, content),
+        content,
+        preview: content.slice(0, 220),
+        source_count: contentWizardState.selectedContent.length || existing?.source_count || 0,
+        sources: contentWizardState.selectedContent.length > 0
+            ? buildDraftSources(contentWizardState.selectedContent)
+            : (existing?.sources || []),
+        provider: ApiKeyManager.getActive().provider,
+        approval_state: approval,
+        export_state: approval === 'exported' ? 'exported' : (existing?.export_state || 'not_exported'),
+        exported_at: existing?.exported_at || null
+    };
+
+    await ContentDraftDB.saveDraft(draftRecord);
+    contentWizardState.draftId = draftId;
+    await updateReviewQueueDisplay();
+    await updateHomeDashboard();
+    return draftRecord;
+}
+
 async function generateContent() {
     const runId = contentWizardState.runId;
     const { provider, apiKey } = ApiKeyManager.getActive();
@@ -1422,6 +1546,18 @@ function downloadGeneratedContent() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     showStatus(elements.llmStatus, '✓ Draft downloaded', 'success');
+}
+
+async function handleSaveDraft() {
+    const draft = await saveGeneratedDraft('pending_review');
+    if (!draft) return;
+    showStatus(elements.llmStatus, '✓ Draft saved to review queue', 'success');
+}
+
+async function handleApproveDraft() {
+    const draft = await saveGeneratedDraft('approved');
+    if (!draft) return;
+    showStatus(elements.llmStatus, '✓ Draft saved as approved', 'success');
 }
 
 function nextStep() {
@@ -1738,10 +1874,12 @@ const elements = {
     dashboardActiveProvider: document.getElementById('dashboardActiveProvider'),
     dashboardPhotoCount: document.getElementById('dashboardPhotoCount'),
     dashboardMemoCount: document.getElementById('dashboardMemoCount'),
+    dashboardDraftCount: document.getElementById('dashboardDraftCount'),
     quickRecordBtn: document.getElementById('quickRecordBtn'),
     quickScreenshotBtn: document.getElementById('quickScreenshotBtn'),
     quickSearchBtn: document.getElementById('quickSearchBtn'),
     quickVoiceHubBtn: document.getElementById('quickVoiceHubBtn'),
+    quickReviewBtn: document.getElementById('quickReviewBtn'),
     createContentBtn: document.getElementById('createContentBtn'),
     contentCreationWizard: document.getElementById('contentCreationWizard'),
     wizardStep: document.getElementById('wizardStep'),
@@ -1769,6 +1907,8 @@ const elements = {
     generationStatus: document.getElementById('generationStatus'),
     generatedContentPreview: document.getElementById('generatedContentPreview'),
     editableContent: document.getElementById('editableContent'),
+    saveDraftBtn: document.getElementById('saveDraftBtn'),
+    approveDraftBtn: document.getElementById('approveDraftBtn'),
     copyGeneratedContentBtn: document.getElementById('copyGeneratedContentBtn'),
     downloadGeneratedContentBtn: document.getElementById('downloadGeneratedContentBtn'),
     prevBtn: document.getElementById('prevBtn'),
@@ -1882,6 +2022,28 @@ const elements = {
     lastUpdated: document.getElementById('lastUpdated'),
     libraryList: document.getElementById('libraryList'),
     libraryItems: document.getElementById('libraryItems'),
+    reviewStatusFilter: document.getElementById('reviewStatusFilter'),
+    reviewPlatformFilter: document.getElementById('reviewPlatformFilter'),
+    reviewSearchInput: document.getElementById('reviewSearchInput'),
+    exportApprovedBundleBtn: document.getElementById('exportApprovedBundleBtn'),
+    refreshReviewQueueBtn: document.getElementById('refreshReviewQueueBtn'),
+    reviewPendingCount: document.getElementById('reviewPendingCount'),
+    reviewApprovedCount: document.getElementById('reviewApprovedCount'),
+    reviewExportedCount: document.getElementById('reviewExportedCount'),
+    reviewQueueEmpty: document.getElementById('reviewQueueEmpty'),
+    reviewQueueList: document.getElementById('reviewQueueList'),
+    reviewEditorPanel: document.getElementById('reviewEditorPanel'),
+    reviewEditorTitle: document.getElementById('reviewEditorTitle'),
+    reviewEditorMeta: document.getElementById('reviewEditorMeta'),
+    reviewEditorStatusBadge: document.getElementById('reviewEditorStatusBadge'),
+    reviewEditorSources: document.getElementById('reviewEditorSources'),
+    reviewDraftEditor: document.getElementById('reviewDraftEditor'),
+    saveReviewDraftBtn: document.getElementById('saveReviewDraftBtn'),
+    approveReviewDraftBtn: document.getElementById('approveReviewDraftBtn'),
+    moveToPendingBtn: document.getElementById('moveToPendingBtn'),
+    exportReviewTxtBtn: document.getElementById('exportReviewTxtBtn'),
+    exportReviewJsonBtn: document.getElementById('exportReviewJsonBtn'),
+    deleteReviewDraftBtn: document.getElementById('deleteReviewDraftBtn'),
     quickSearchBtns: document.querySelectorAll('.quick-search-btn'),
     showShortcutBtn: document.getElementById('showShortcutBtn'),
     copyShortcutBtn: document.getElementById('copyShortcutBtn'),
@@ -1951,6 +2113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTesseractStatus();
     updateLibraryDisplay();
     updateVoiceLibraryDisplay();
+    updateReviewQueueDisplay();
 });
 
 function initEventListeners() {
@@ -1965,6 +2128,7 @@ function initEventListeners() {
     });
     elements.quickSearchBtn.addEventListener('click', openQuickSearch);
     elements.quickVoiceHubBtn.addEventListener('click', openQuickVoiceHub);
+    elements.quickReviewBtn.addEventListener('click', openQuickReviewQueue);
     elements.createContentBtn.addEventListener('click', openContentWizard);
     elements.platformGrid.addEventListener('click', (e) => {
         const button = e.target.closest('.platform-card[data-platform]');
@@ -1986,6 +2150,8 @@ function initEventListeners() {
             closeWizard();
         }
     });
+    elements.saveDraftBtn.addEventListener('click', handleSaveDraft);
+    elements.approveDraftBtn.addEventListener('click', handleApproveDraft);
     elements.copyGeneratedContentBtn.addEventListener('click', copyGeneratedContent);
     elements.downloadGeneratedContentBtn.addEventListener('click', downloadGeneratedContent);
     elements.editableContent.addEventListener('input', () => {
@@ -2140,6 +2306,43 @@ function initEventListeners() {
             quickSearch(btn.dataset.term);
         });
     });
+    elements.reviewStatusFilter.addEventListener('change', updateReviewQueueDisplay);
+    elements.reviewPlatformFilter.addEventListener('change', updateReviewQueueDisplay);
+    elements.reviewSearchInput.addEventListener('input', updateReviewQueueDisplay);
+    elements.exportApprovedBundleBtn.addEventListener('click', exportApprovedDraftBundle);
+    elements.refreshReviewQueueBtn.addEventListener('click', updateReviewQueueDisplay);
+    elements.reviewQueueList.addEventListener('click', async (e) => {
+        const button = e.target.closest('button[data-review-action]');
+        if (!button) return;
+
+        const { reviewAction, draftId } = button.dataset;
+        if (!draftId) return;
+
+        if (reviewAction === 'open') {
+            await openDraftForReview(draftId);
+        } else if (reviewAction === 'approve') {
+            await openDraftForReview(draftId);
+            await updateSelectedDraftApprovalState('approved');
+        } else if (reviewAction === 'exportTxt') {
+            await exportDraftById(draftId, 'txt');
+        } else if (reviewAction === 'exportJson') {
+            await exportDraftById(draftId, 'json');
+        }
+    });
+    elements.saveReviewDraftBtn.addEventListener('click', saveReviewDraftChanges);
+    elements.approveReviewDraftBtn.addEventListener('click', () => updateSelectedDraftApprovalState('approved'));
+    elements.moveToPendingBtn.addEventListener('click', () => updateSelectedDraftApprovalState('pending_review'));
+    elements.exportReviewTxtBtn.addEventListener('click', () => {
+        if (reviewState.selectedDraftId) {
+            exportDraftById(reviewState.selectedDraftId, 'txt');
+        }
+    });
+    elements.exportReviewJsonBtn.addEventListener('click', () => {
+        if (reviewState.selectedDraftId) {
+            exportDraftById(reviewState.selectedDraftId, 'json');
+        }
+    });
+    elements.deleteReviewDraftBtn.addEventListener('click', deleteSelectedDraft);
 
     elements.showShortcutBtn.addEventListener('click', () => {
         elements.shortcutModal.classList.remove('hidden');
@@ -2931,6 +3134,308 @@ function quickSearch(term) {
     }, 100);
 }
 
+function formatApprovalLabel(state) {
+    const labels = {
+        pending_review: 'Pending Review',
+        approved: 'Approved',
+        exported: 'Exported'
+    };
+    return labels[state] || 'Draft';
+}
+
+async function updateReviewQueueDisplay() {
+    try {
+        const drafts = await ContentDraftDB.getAll();
+        const sorted = drafts.sort((a, b) => new Date(b.updated_at || b.timestamp) - new Date(a.updated_at || a.timestamp));
+        const statusFilter = elements.reviewStatusFilter.value;
+        const platformFilter = elements.reviewPlatformFilter.value;
+        const query = elements.reviewSearchInput.value.trim().toLowerCase();
+
+        elements.reviewPendingCount.textContent = String(drafts.filter((draft) => draft.approval_state === 'pending_review').length);
+        elements.reviewApprovedCount.textContent = String(drafts.filter((draft) => draft.approval_state === 'approved').length);
+        elements.reviewExportedCount.textContent = String(drafts.filter((draft) => draft.approval_state === 'exported').length);
+
+        const filtered = sorted.filter((draft) => {
+            if (statusFilter && draft.approval_state !== statusFilter) {
+                return false;
+            }
+            if (platformFilter && draft.platform !== platformFilter) {
+                return false;
+            }
+            if (!query) {
+                return true;
+            }
+
+            const sourceSummary = (draft.sources || [])
+                .map((source) => `${source.file_name} ${source.summary}`)
+                .join(' ')
+                .toLowerCase();
+
+            return [
+                draft.title,
+                draft.content,
+                draft.platform,
+                draft.preview,
+                sourceSummary
+            ].join(' ').toLowerCase().includes(query);
+        });
+
+        elements.reviewQueueList.innerHTML = '';
+        if (filtered.length === 0) {
+            elements.reviewQueueEmpty.classList.remove('hidden');
+            elements.reviewQueueList.classList.add('hidden');
+        } else {
+            elements.reviewQueueEmpty.classList.add('hidden');
+            elements.reviewQueueList.classList.remove('hidden');
+            filtered.forEach((draft) => {
+                elements.reviewQueueList.appendChild(createReviewQueueCard(draft));
+            });
+        }
+
+        if (reviewState.selectedDraftId) {
+            const selected = drafts.find((draft) => draft.id === reviewState.selectedDraftId);
+            if (selected) {
+                populateReviewEditor(selected);
+            } else {
+                clearReviewEditor();
+            }
+        }
+    } catch (error) {
+        console.error('Review queue update failed:', error);
+    }
+}
+
+function createReviewQueueCard(draft) {
+    const card = document.createElement('div');
+    card.className = 'review-card';
+    const statusClass = draft.approval_state === 'approved'
+        ? 'approved'
+        : draft.approval_state === 'exported'
+            ? 'exported'
+            : 'pending';
+    const sourceNames = (draft.sources || [])
+        .slice(0, 2)
+        .map((source) => source.file_name)
+        .join(' • ');
+
+    card.innerHTML = `
+        <div class="review-card-header">
+            <div>
+                <h4>${escapeHtml(draft.title || 'Untitled Draft')}</h4>
+                <p class="help-text">${escapeHtml(getPlatformLabel(draft.platform || 'content'))} • ${new Date(draft.updated_at || draft.timestamp).toLocaleString()}</p>
+            </div>
+            <span class="review-status-badge ${statusClass}">${escapeHtml(formatApprovalLabel(draft.approval_state))}</span>
+        </div>
+        <p class="review-card-preview">${escapeHtml(draft.preview || draft.content.slice(0, 220))}</p>
+        <p class="help-text">${escapeHtml(sourceNames || `${draft.source_count || 0} source items`)}</p>
+        <div class="review-card-actions">
+            <button class="btn btn-secondary btn-small" type="button" data-review-action="open" data-draft-id="${draft.id}">Open</button>
+            <button class="btn btn-outline btn-small" type="button" data-review-action="approve" data-draft-id="${draft.id}">Approve</button>
+            <button class="btn btn-secondary btn-small" type="button" data-review-action="exportTxt" data-draft-id="${draft.id}">TXT</button>
+            <button class="btn btn-secondary btn-small" type="button" data-review-action="exportJson" data-draft-id="${draft.id}">JSON</button>
+        </div>
+    `;
+
+    return card;
+}
+
+async function openDraftForReview(draftId) {
+    const draft = await ContentDraftDB.getById(draftId);
+    if (!draft) {
+        return;
+    }
+
+    reviewState.selectedDraftId = draftId;
+    populateReviewEditor(draft);
+    elements.reviewEditorPanel.classList.remove('hidden');
+    elements.reviewEditorPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function populateReviewEditor(draft) {
+    reviewState.selectedDraftId = draft.id;
+    elements.reviewEditorTitle.textContent = draft.title || 'Review Draft';
+    elements.reviewEditorMeta.textContent = `${getPlatformLabel(draft.platform || 'content')} • ${formatApprovalLabel(draft.approval_state)} • ${draft.source_count || 0} source item(s)`;
+    elements.reviewEditorStatusBadge.textContent = formatApprovalLabel(draft.approval_state);
+    elements.reviewEditorStatusBadge.className = `review-status-badge ${
+        draft.approval_state === 'approved'
+            ? 'approved'
+            : draft.approval_state === 'exported'
+                ? 'exported'
+                : 'pending'
+    }`;
+    elements.reviewDraftEditor.value = draft.content || '';
+    elements.reviewEditorSources.innerHTML = '';
+
+    (draft.sources || []).forEach((source) => {
+        const item = document.createElement('div');
+        item.className = 'review-source-item';
+        item.innerHTML = `
+            <strong>${escapeHtml(source.type === 'memo' ? '🎙️' : '📷')} ${escapeHtml(source.file_name || 'Source')}</strong>
+            <p class="help-text">${escapeHtml(source.summary || 'No summary available.')}</p>
+        `;
+        elements.reviewEditorSources.appendChild(item);
+    });
+}
+
+function clearReviewEditor() {
+    reviewState.selectedDraftId = null;
+    elements.reviewEditorPanel.classList.add('hidden');
+    elements.reviewEditorTitle.textContent = 'Review Draft';
+    elements.reviewEditorMeta.textContent = 'Platform • status • source count';
+    elements.reviewEditorStatusBadge.textContent = 'Pending Review';
+    elements.reviewEditorStatusBadge.className = 'review-status-badge';
+    elements.reviewDraftEditor.value = '';
+    elements.reviewEditorSources.innerHTML = '';
+}
+
+async function saveReviewDraftChanges() {
+    if (!reviewState.selectedDraftId) {
+        return;
+    }
+
+    const draft = await ContentDraftDB.getById(reviewState.selectedDraftId);
+    if (!draft) {
+        clearReviewEditor();
+        return;
+    }
+
+    const content = elements.reviewDraftEditor.value.trim();
+    if (!content) {
+        showStatus(elements.batchStatus, '✗ Draft content cannot be empty', 'error');
+        return;
+    }
+
+    await ContentDraftDB.saveDraft({
+        ...draft,
+        content,
+        preview: content.slice(0, 220),
+        title: buildDraftTitle(draft.platform, content),
+        updated_at: new Date().toISOString()
+    });
+
+    await updateReviewQueueDisplay();
+    showStatus(elements.batchStatus, '✓ Draft changes saved', 'success');
+}
+
+async function updateSelectedDraftApprovalState(nextState) {
+    if (!reviewState.selectedDraftId) {
+        return;
+    }
+
+    const draft = await ContentDraftDB.getById(reviewState.selectedDraftId);
+    if (!draft) {
+        clearReviewEditor();
+        return;
+    }
+
+    await ContentDraftDB.saveDraft({
+        ...draft,
+        content: elements.reviewDraftEditor.value.trim() || draft.content,
+        preview: (elements.reviewDraftEditor.value.trim() || draft.content).slice(0, 220),
+        approval_state: nextState,
+        export_state: nextState === 'exported' ? 'exported' : draft.export_state,
+        exported_at: nextState === 'exported' ? new Date().toISOString() : draft.exported_at,
+        updated_at: new Date().toISOString()
+    });
+
+    await updateReviewQueueDisplay();
+    await updateHomeDashboard();
+    showStatus(elements.batchStatus, `✓ Draft marked ${formatApprovalLabel(nextState).toLowerCase()}`, 'success');
+}
+
+function downloadTextFile(content, filename) {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function downloadJsonFile(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+async function exportDraftById(draftId, format = 'txt') {
+    const draft = await ContentDraftDB.getById(draftId);
+    if (!draft) {
+        return;
+    }
+
+    if (format === 'json') {
+        downloadJsonFile(draft, `${draft.id}.json`);
+    } else {
+        downloadTextFile(draft.content, `${draft.id}.txt`);
+    }
+
+    await ContentDraftDB.saveDraft({
+        ...draft,
+        approval_state: 'exported',
+        export_state: 'exported',
+        exported_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    });
+
+    await updateReviewQueueDisplay();
+    await updateHomeDashboard();
+    showStatus(elements.batchStatus, `✓ Draft exported as ${format.toUpperCase()}`, 'success');
+}
+
+async function exportApprovedDraftBundle() {
+    const drafts = await ContentDraftDB.getAll();
+    const approved = drafts.filter((draft) => draft.approval_state === 'approved' || draft.approval_state === 'exported');
+
+    if (approved.length === 0) {
+        showStatus(elements.batchStatus, '✗ No approved drafts to export yet', 'error');
+        return;
+    }
+
+    downloadJsonFile({
+        exported_at: new Date().toISOString(),
+        draft_count: approved.length,
+        items: approved
+    }, `phone-studio-approved-bundle-${Date.now()}.json`);
+
+    await Promise.all(approved.map((draft) => ContentDraftDB.saveDraft({
+        ...draft,
+        approval_state: 'exported',
+        export_state: 'exported',
+        exported_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    })));
+
+    await updateReviewQueueDisplay();
+    await updateHomeDashboard();
+    showStatus(elements.batchStatus, '✓ Approved bundle exported', 'success');
+}
+
+async function deleteSelectedDraft() {
+    if (!reviewState.selectedDraftId) {
+        return;
+    }
+
+    if (!confirm('Delete this saved draft? This cannot be undone.')) {
+        return;
+    }
+
+    await ContentDraftDB.deleteDraft(reviewState.selectedDraftId);
+    clearReviewEditor();
+    await updateReviewQueueDisplay();
+    await updateHomeDashboard();
+    showStatus(elements.batchStatus, '✓ Draft deleted', 'success');
+}
+
 async function playVoiceMemo(memoId) {
     await viewVoiceMemo(memoId);
     try {
@@ -2951,6 +3456,10 @@ function switchBatchTab(tabName) {
 
     document.getElementById(`${tabName}Tab`).classList.add('active');
     document.querySelector(`.batch-tab-btn[data-tab="${tabName}"]`).classList.add('active');
+
+    if (tabName === 'review') {
+        updateReviewQueueDisplay();
+    }
 }
 
 async function updateLibraryDisplay() {

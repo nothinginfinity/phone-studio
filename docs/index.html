@@ -76,6 +76,10 @@
                             <span class="home-status-label">Voice Memos</span>
                             <strong><span id="dashboardMemoCount">0</span> memos</strong>
                         </div>
+                        <div class="home-status-chip">
+                            <span class="home-status-label">Review Queue</span>
+                            <strong><span id="dashboardDraftCount">0</span> drafts</strong>
+                        </div>
                     </div>
                 </div>
 
@@ -99,6 +103,11 @@
                         <span class="quick-launch-icon">☁️</span>
                         <span class="quick-launch-title">Voice Memo Hub</span>
                         <span class="quick-launch-copy">Jump to voice memo imports, iCloud checks, and recent memos.</span>
+                    </button>
+                    <button id="quickReviewBtn" class="quick-launch-card" type="button">
+                        <span class="quick-launch-icon">✅</span>
+                        <span class="quick-launch-title">Review Queue</span>
+                        <span class="quick-launch-copy">Approve drafts, make edits, and export content bundles locally.</span>
                     </button>
                 </div>
 
@@ -224,6 +233,8 @@
                             <div id="generatedContentPreview" class="content-preview"></div>
                             <div class="content-actions">
                                 <textarea id="editableContent" class="textarea" placeholder="Edit content if needed..." style="min-height: 200px;"></textarea>
+                                <button id="saveDraftBtn" class="btn btn-primary" type="button">💾 Save to Review Queue</button>
+                                <button id="approveDraftBtn" class="btn btn-accent" type="button">✅ Save as Approved</button>
                                 <button id="copyGeneratedContentBtn" class="btn btn-secondary" type="button">📋 Copy Draft</button>
                                 <button id="downloadGeneratedContentBtn" class="btn btn-outline" type="button">📥 Download Draft</button>
                             </div>
@@ -433,6 +444,7 @@
                     <button class="batch-tab-btn active" data-tab="upload">Upload & Process</button>
                     <button class="batch-tab-btn" data-tab="search">Search Index</button>
                     <button class="batch-tab-btn" data-tab="library">Photo Library</button>
+                    <button class="batch-tab-btn" data-tab="review">Review Queue</button>
                     <button class="batch-tab-btn" data-tab="voiceMemos">🎙️ Voice Memos</button>
                 </div>
 
@@ -587,6 +599,81 @@
                     <div id="libraryList" class="library-list hidden">
                         <p class="help-text" style="margin-top: 16px; margin-bottom: 12px;">Recently processed:</p>
                         <div id="libraryItems"></div>
+                    </div>
+                </div>
+
+                <div class="batch-tab-content" id="reviewTab">
+                    <div class="review-overview">
+                        <div class="library-stats review-stats">
+                            <p><strong>Pending Review:</strong> <span id="reviewPendingCount">0</span></p>
+                            <p><strong>Approved:</strong> <span id="reviewApprovedCount">0</span></p>
+                            <p><strong>Exported:</strong> <span id="reviewExportedCount">0</span></p>
+                        </div>
+
+                        <div class="review-filters">
+                            <div class="filter-group">
+                                <label class="filter-label" for="reviewStatusFilter">Status:</label>
+                                <select id="reviewStatusFilter" class="select select-small">
+                                    <option value="">All Drafts</option>
+                                    <option value="pending_review">Pending Review</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="exported">Exported</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label" for="reviewPlatformFilter">Platform:</label>
+                                <select id="reviewPlatformFilter" class="select select-small">
+                                    <option value="">All Platforms</option>
+                                    <option value="instagram">Instagram</option>
+                                    <option value="tiktok">TikTok</option>
+                                    <option value="linkedin">LinkedIn</option>
+                                    <option value="blog">Blog</option>
+                                    <option value="email">Email</option>
+                                    <option value="twitter">Twitter/X</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <input type="text" id="reviewSearchInput" class="select search-main-input" placeholder="Search saved drafts...">
+
+                        <div class="quick-actions review-actions">
+                            <button id="exportApprovedBundleBtn" class="btn btn-secondary" type="button">📦 Export Approved Bundle</button>
+                            <button id="refreshReviewQueueBtn" class="btn btn-outline" type="button">🔄 Refresh Queue</button>
+                        </div>
+                    </div>
+
+                    <div id="reviewQueueEmpty" class="search-empty">
+                        <p>📝 No saved drafts yet</p>
+                        <p class="help-text">Generate content, then save it to the review queue.</p>
+                    </div>
+
+                    <div id="reviewQueueList" class="review-queue-list hidden"></div>
+
+                    <div id="reviewEditorPanel" class="panel review-editor-panel hidden">
+                        <div class="review-editor-header">
+                            <div>
+                                <p class="eyebrow">Draft Editor</p>
+                                <h3 id="reviewEditorTitle">Review Draft</h3>
+                                <p id="reviewEditorMeta" class="help-text">Platform • status • source count</p>
+                            </div>
+                            <span id="reviewEditorStatusBadge" class="review-status-badge">Pending Review</span>
+                        </div>
+
+                        <div class="review-editor-sources">
+                            <h4>Source Material</h4>
+                            <div id="reviewEditorSources" class="review-source-list"></div>
+                        </div>
+
+                        <textarea id="reviewDraftEditor" class="textarea" placeholder="Edit approved content here..." style="min-height: 220px;"></textarea>
+
+                        <div class="review-editor-actions">
+                            <button id="saveReviewDraftBtn" class="btn btn-primary" type="button">💾 Save Changes</button>
+                            <button id="approveReviewDraftBtn" class="btn btn-accent" type="button">✅ Mark Approved</button>
+                            <button id="moveToPendingBtn" class="btn btn-outline" type="button">↩️ Move to Pending</button>
+                            <button id="exportReviewTxtBtn" class="btn btn-secondary" type="button">📄 Export TXT</button>
+                            <button id="exportReviewJsonBtn" class="btn btn-secondary" type="button">🧾 Export JSON</button>
+                            <button id="deleteReviewDraftBtn" class="btn btn-outline" type="button">🗑️ Delete Draft</button>
+                        </div>
                     </div>
                 </div>
 

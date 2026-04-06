@@ -1,5 +1,21 @@
 # Phone Studio Versions
 
+## V5.1 - Local Review Queue
+
+**New Features:**
+- Local `Review Queue` tab for generated drafts
+- Save drafts from the content wizard as `Pending Review` or `Approved`
+- Re-open and edit saved drafts later on iPhone
+- Export single drafts as TXT or JSON
+- Export an approved-drafts bundle for manual posting or downstream workflows
+
+**Workflow:**
+1. Generate content in `Create Content`
+2. Save it into the review queue
+3. Approve, edit, or move it back to pending
+4. Export individual drafts or the full approved bundle
+5. Post manually or hand off to a later automation layer
+
 ## V5 - Content Creation Wizard
 
 **New Features:**

@@ -122,6 +122,28 @@ Phone Studio now includes a guided `Create Content` wizard that turns indexed sc
 - Copy-to-clipboard or plain-text download
 - Works with the same active provider configured in Settings
 
+## Local Review Queue
+
+Phone Studio now supports a local approval workflow that stays fully on-device and does not depend on Instagram auto-posting.
+
+### What It Adds
+
+- Save generated drafts into a local `Review Queue`
+- Mark drafts as `Pending Review`, `Approved`, or `Exported`
+- Re-open and edit saved drafts later
+- Export single drafts as `.txt` or `.json`
+- Export an approved-drafts bundle as one JSON file for downstream review, scheduling, or manual posting
+
+### Suggested Workflow
+
+1. Capture screenshots or voice memos
+2. Search or organize source material in the library
+3. Generate a draft from `Create Content`
+4. Tap `Save to Review Queue` or `Save as Approved`
+5. Open the `Review Queue` tab to edit, approve, and export
+
+This gives Phone Studio a usable local publishing pipeline even while Instagram automation remains unverified.
+
 ## V1.5 Features
 
 - Screenshot capture plus OCR extraction
