@@ -1,0 +1,22 @@
+# Phone Studio Context MCP Server — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# GitHub API client
+PyGithub==2.4.0
+
+# Data validation
+pydantic==2.10.4
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Optional: for running scheduled jobs locally
+apscheduler==3.10.4
+
+# Optional: for LLM calls from the MCP server
+# openai==1.58.0
+# anthropic==0.40.0

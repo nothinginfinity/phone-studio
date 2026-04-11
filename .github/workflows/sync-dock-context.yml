@@ -1,0 +1,49 @@
+# ============================================================
+# sync-dock-context.yml
+# PURPOSE: On push to main — detect context changes and notify
+#          Phone Studio Dock to pull fresh context on next inference
+# FILLS IN: Set DOCK_WEBHOOK_URL secret in GitHub → Settings → Secrets
+#           (Point to your Phone Studio Dock local webhook endpoint)
+# ============================================================
+
+name: Sync Dock Context
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'knowledge/**'
+      - 'context/approvals/**'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need parent commit to diff
+
+      - name: Detect changed context files
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- docs/ knowledge/ context/approvals/ | tr '\n' ',')
+          echo "files=$CHANGED" >> $GITHUB_OUTPUT
+          echo "Changed context files: $CHANGED"
+
+      - name: Notify Phone Studio Dock (if webhook configured)
+        if: env.DOCK_WEBHOOK_URL != ''
+        run: |
+          curl -s -X POST "$DOCK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"event\": \"context_updated\", \"changed_files\": \"${{ steps.changes.outputs.files }}\", \"repo\": \"$GITHUB_REPOSITORY\", \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" \
+            || echo "Dock offline — context will sync on next connection"
+        env:
+          DOCK_WEBHOOK_URL: ${{ secrets.DOCK_WEBHOOK_URL }}
+
+      - name: Log sync attempt
+        run: |
+          echo "Context sync triggered at $(date -u)"
+          echo "Files: ${{ steps.changes.outputs.files }}"

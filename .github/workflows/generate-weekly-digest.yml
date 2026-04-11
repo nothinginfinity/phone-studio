@@ -1,0 +1,83 @@
+# ============================================================
+# generate-weekly-digest.yml
+# PURPOSE: Every Monday — summarize approved content, surface patterns,
+#          generate a digest file for next-week planning context
+# FILLS IN: Wire in your preferred LLM API key as OPENAI_API_KEY or similar
+# ============================================================
+
+name: Generate Weekly Digest
+
+on:
+  schedule:
+    - cron: '0 16 * * 1'  # Every Monday 9am PT (UTC-7) = 16:00 UTC
+  workflow_dispatch:       # Manual trigger for testing
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate weekly digest
+        run: |
+          python - <<'EOF'
+          import os
+          import glob
+          from datetime import datetime, timedelta
+
+          # Get current week number
+          now = datetime.utcnow()
+          week_str = now.strftime("%Y-W%U")
+          outfile = f"context/digests/weekly_{week_str}.md"
+          os.makedirs("context/digests", exist_ok=True)
+
+          # Read approved content from last 7 days
+          approved_files = glob.glob("context/approvals/*.md")
+          approved_content = []
+          for f in approved_files:
+              with open(f) as fh:
+                  approved_content.append(fh.read()[:500])  # First 500 chars for summary
+
+          # Build digest (extend this with LLM summarization if desired)
+          digest = f"""# Weekly Digest — {week_str}
+
+          Generated: {now.strftime("%Y-%m-%d %H:%M UTC")}
+
+          ## Approved Content This Week
+
+          {chr(10).join(approved_content) if approved_content else "No approved content found."}
+
+          ## Action Items for Next Week
+
+          <!-- LLM: Read the above approved content and:
+               1. List 3 content patterns that performed well
+               2. Suggest 3 new topics based on gaps
+               3. Flag anything that needs follow-up -->
+
+          ## Context for LLMs
+
+          Use this file to avoid repeating recent content and to maintain
+          consistency with approved tone and topics.
+          """
+
+          with open(outfile, "w") as f:
+              f.write(digest)
+          print(f"Digest written: {outfile}")
+          EOF
+
+      - name: Commit digest
+        run: |
+          git config user.name "Phone Studio Bot"
+          git config user.email "bot@phone-studio"
+          git add context/digests/
+          git diff --cached --quiet || git commit -m "auto: weekly digest [skip ci]"
+          git push

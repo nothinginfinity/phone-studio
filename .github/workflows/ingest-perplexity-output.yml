@@ -1,0 +1,111 @@
+# ============================================================
+# ingest-perplexity-output.yml
+# PURPOSE: Auto-save Perplexity Computer conversations to context/conversations/
+# TRIGGER:  Manual dispatch ("Save this conversation") OR daily at 9am PT
+# FILLS IN: Update PERPLEXITY_API_URL if/when Perplexity exposes a conversations API
+# ============================================================
+
+name: Ingest Perplexity Output
+
+on:
+  workflow_dispatch:
+    inputs:
+      conversation_title:
+        description: 'Short title for this conversation (e.g. podcast-script-ep42)'
+        required: true
+        type: string
+      conversation_content:
+        description: 'Paste the conversation content here (or leave blank for file upload)'
+        required: false
+        type: string
+  schedule:
+    - cron: '0 16 * * *'  # Daily 9am PT (UTC-7) = 16:00 UTC
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install PyGithub python-frontmatter
+
+      - name: Save conversation to context/conversations/
+        run: |
+          python - <<'EOF'
+          import os
+          import json
+          from datetime import datetime
+
+          title = os.environ.get("INPUT_TITLE", "untitled").lower().replace(" ", "-")
+          content = os.environ.get("INPUT_CONTENT", "")
+          date = datetime.utcnow().strftime("%Y-%m-%d")
+          filename = f"context/conversations/{date}-{title}.md"
+
+          # Create directory if it doesn't exist
+          os.makedirs("context/conversations", exist_ok=True)
+
+          # Write the conversation file
+          with open(filename, "w") as f:
+              f.write(f"""---
+          date: {date}
+          title: "{title}"
+          platform: perplexity
+          status: saved
+          llm: perplexity-computer
+          ---
+
+          # {title}
+
+          {content if content else "<!-- Paste conversation content here -->"}
+          """)
+
+          print(f"Saved: {filename}")
+          EOF
+        env:
+          INPUT_TITLE: ${{ github.event.inputs.conversation_title }}
+          INPUT_CONTENT: ${{ github.event.inputs.conversation_content }}
+
+      - name: Update conversations INDEX.md
+        run: |
+          python - <<'EOF'
+          import os
+          import glob
+          from datetime import datetime
+
+          files = sorted(glob.glob("context/conversations/*.md"), reverse=True)[:20]
+          rows = []
+          for f in files:
+              base = os.path.basename(f)
+              date = base[:10] if len(base) > 10 else "unknown"
+              title = base[11:].replace(".md", "").replace("-", " ").title()
+              rows.append(f"| {date} | [{title}]({base}) | — | — | saved |")
+
+          index_content = f"""# Recent Conversations Index
+
+          Last updated: {datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")}
+
+          | Date | Title | Platform | LLM | Status |
+          |------|-------|----------|-----|--------|
+          """ + "\n".join(rows)
+
+          with open("context/conversations/INDEX.md", "w") as f:
+              f.write(index_content)
+          EOF
+
+      - name: Commit changes
+        run: |
+          git config user.name "Phone Studio Bot"
+          git config user.email "bot@phone-studio"
+          git add context/conversations/
+          git diff --cached --quiet || git commit -m "auto: ingest Perplexity conversation [skip ci]"
+          git push

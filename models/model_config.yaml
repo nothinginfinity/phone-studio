@@ -1,0 +1,73 @@
+# ============================================================
+# model_config.yaml — LLM Model Configuration
+# ============================================================
+# This file mirrors docs/LLM_ROUTING.md in machine-readable form.
+# Phone Studio Dock reads this to know which model to load for each task.
+#
+# FILLS IN: Update model paths to match your local Dock model filenames
+
+models:
+  transcription:
+    name: whisper-base
+    type: whisper
+    location: dock
+    file: whisper-base.bin          # FILL IN: actual filename on your Dock
+    latency: "2x audio duration"
+    cost: free
+    fallback:
+      name: openai-whisper
+      type: api
+      env_key: OPENAI_API_KEY
+
+  idea_generation:
+    name: mistral-7b
+    type: gguf
+    location: dock
+    file: mistral-7b-instruct.gguf  # FILL IN: actual filename on your Dock
+    latency: "3–5s"
+    cost: free
+    context_window: 8192
+    fallback:
+      name: claude-3-haiku
+      type: api
+      env_key: ANTHROPIC_API_KEY
+
+  caption_writing:
+    name: phi-3-3.8b
+    type: gguf
+    location: dock
+    file: phi-3-mini-instruct.gguf  # FILL IN: actual filename on your Dock
+    latency: "2–3s"
+    cost: free
+    context_window: 4096
+    fallback:
+      name: gpt-4o-mini
+      type: api
+      env_key: OPENAI_API_KEY
+
+  lead_routing:
+    name: claude-3
+    type: api
+    location: cloud
+    env_key: ANTHROPIC_API_KEY
+    latency: "1s"
+    cost: "$0.01–0.05/request"
+    fallback: null   # No fallback — lead routing requires cloud reasoning
+
+  embedding:
+    name: all-minilm-l6-v2
+    type: sentence-transformers
+    location: dock
+    file: all-minilm-l6-v2.bin
+    latency: "0.1s"
+    cost: free
+    fallback: null
+
+# ── Decision Logic ──────────────────────────────────────────
+# See docs/LLM_ROUTING.md for the full routing decision tree.
+# This section is for reference / Dock config loading only.
+
+routing_priority:
+  - prefer: dock      # Always try local first
+  - fallback: api     # Fall back to cloud API if dock unavailable
+  - queue: true       # If both unavailable, queue for later processing

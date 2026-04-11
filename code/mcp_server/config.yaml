@@ -1,0 +1,36 @@
+# ============================================================
+# config.yaml — Phone Studio Context MCP Server Configuration
+# ============================================================
+# FILLS IN: Copy values from your .env or set directly here (non-sensitive only)
+# Sensitive values (tokens, keys) belong in .env — never commit secrets to config.yaml
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false         # Set true during local development
+
+github:
+  repo: ""              # FILL IN: "yourusername/phone-studio"
+  default_branch: main
+  context_files:
+    brand_voice:    "docs/BRAND_VOICE.md"
+    audience:       "knowledge/audience.md"
+    llm_routing:    "docs/LLM_ROUTING.md"
+    calendar:       "knowledge/content_calendar.json"
+    strategy:       "knowledge/content_strategy.md"
+    instagram:      "context/approvals/instagram_posts.md"
+    captions:       "context/approvals/captions.md"
+    conv_index:     "context/conversations/INDEX.md"
+
+context:
+  max_conversation_chars: 800    # Truncate conversation previews for speed
+  recent_conversations_limit: 5  # Default lookback for generate_ideas
+
+llm_routing:
+  # Which model handles which task (mirrored in docs/LLM_ROUTING.md)
+  # These are informational — the actual routing logic is in your Dock
+  transcribe:      "whisper-base"
+  generate_ideas:  "mistral-7b"
+  write_captions:  "phi-3-3.8b"
+  route_lead:      "claude-3"
+  embed:           "all-minilm"

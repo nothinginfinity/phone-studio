@@ -1,0 +1,18 @@
+{
+  "_comment": "Content calendar — LLMs read this to avoid scheduling conflicts and suggest timely topics.",
+  "_instructions": "Update status as content moves through your workflow. Valid statuses: planning / draft / approved / posted / archived",
+  "content": [
+    {
+      "_comment": "TEMPLATE — copy this object for each piece of content",
+      "id": "YYYY-MM-DD-platform-slug",
+      "date": "YYYY-MM-DD",
+      "platform": "instagram",
+      "title": "Post title",
+      "format": "single-image / carousel / reel / thread / long-form / podcast",
+      "topics": ["topic1", "topic2"],
+      "status": "planning",
+      "draft_url": "",
+      "notes": ""
+    }
+  ]
+}

@@ -404,3 +404,58 @@ phone-studio/
 - Instagram and TikTok auto-posting
 - CRM integration
 - Cross-device workflow
+
+---
+
+## Context Brain Layer
+
+Phone Studio now includes a **context brain** — a GitHub-native intelligence layer that gives every LLM you use a consistent, persistent memory of your brand, audience, approved content, and creation history.
+
+### What It Is
+
+The context brain turns this repo into a distributed knowledge base that any LLM (Perplexity Computer, Phone Studio Dock, Claude, GPT-4) can read before generating content for you.
+
+Instead of re-explaining your brand voice in every prompt, you write it once in `docs/BRAND_VOICE.md` and every model reads it automatically.
+
+### How It Connects
+
+```
+Perplexity Computer ──reads/writes──► GitHub (this repo)
+                                          │
+Phone Studio Dock ──reads context──────► docs/ + knowledge/ + context/
+                                          │
+GitHub Actions ──auto-commits──────────► context/conversations/ + digests/
+```
+
+**Three integration points:**
+1. **Perplexity Computer** — reads your brand context before generating; saves conversations via the `Ingest Perplexity Output` workflow
+2. **Phone Studio Dock** — reads `docs/BRAND_VOICE.md` and `context/approvals/` before LLM inference
+3. **MCP Server** (`code/mcp_server/`) — optional FastAPI bridge that serves context to any tool that can call an HTTP endpoint
+
+### New Directories
+
+| Directory | Purpose | Update Frequency |
+|-----------|---------|-----------------|
+| `context/conversations/` | Saved Perplexity Computer sessions | Every session |
+| `context/approvals/` | Approved content (source of truth) | After each approval |
+| `context/scratch/` | In-progress drafts | Frequently |
+| `context/digests/` | Auto-generated weekly summaries | Every Monday |
+| `knowledge/` | Audience, calendar, strategy | Weekly |
+| `code/mcp_server/` | FastAPI MCP server | As needed |
+| `code/prompt_templates/` | Reusable LLM prompt templates | As needed |
+| `models/` | Model config and tracking | When switching models |
+| `experiments/` | A/B prompt and model tests | Occasionally |
+| `.github/workflows/` | GitHub Actions automation | Rarely |
+
+### Quick Setup (3 Steps)
+
+1. **Fill in your context**: `docs/BRAND_VOICE.md` and `knowledge/audience.md`
+2. **Copy `.env.example` → `.env`** and add your `GITHUB_TOKEN`
+3. **Enable the GitHub Actions**: Actions tab → enable all workflows
+
+### Key Reference
+
+See [`docs/CONTEXT_SCHEMA.md`](docs/CONTEXT_SCHEMA.md) for the full schema of all context files.  
+See [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) for step-by-step content creation workflows.  
+See [`docs/LLM_ROUTING.md`](docs/LLM_ROUTING.md) for which model handles which task.
+

@@ -14,3 +14,24 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+venv/
+.venv/
+
+# MCP server local config
+.env.local.yaml
+
+# Experiment outputs (keep setup/results, ignore raw data)
+experiments/**/*.json
+experiments/**/*.csv
+
+# OS
+*.swp
+*.swo
