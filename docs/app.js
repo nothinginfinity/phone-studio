@@ -4127,6 +4127,10 @@ async function sendToLLM() {
         elements.downloadBtn.disabled = false;
         elements.copyBtn.disabled = false;
         elements.generateVariantsBtn.disabled = false;
+        // GitHub Bridge: store last output + enable Save button
+        window._psLastOutput = state.llmOutput || '';
+        const saveBtn = document.getElementById('saveToGithubBtn');
+        if (saveBtn) saveBtn.disabled = false;
     } catch (error) {
         console.error('LLM Error:', error);
         setLastError(`LLM failed: ${error.message}`);

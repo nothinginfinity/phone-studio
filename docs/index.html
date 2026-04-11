@@ -430,6 +430,10 @@
                     <button id="copyBtn" class="btn btn-secondary" disabled>
                         📋 Copy JSON
                     </button>
+                    <button id="saveToGithubBtn" class="btn btn-secondary" disabled
+                            onclick="GitHubUI.openSaveModal(window._psLastOutput || '', 'caption')">
+                        🐙 Save to GitHub
+                    </button>
                     <button id="resetBtn" class="btn btn-outline">
                         🔄 Start Over
                     </button>
@@ -1064,6 +1068,16 @@
                     </div>
                 </div>
 
+                <!-- GitHub Bridge Settings -->
+                <div class="settings-section" id="githubBridgeSettings">
+                    <h3>🐙 GitHub Bridge</h3>
+                    <p class="help-text">Save generated content from Phone Studio directly to your GitHub repo. Obsidian syncs automatically.</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+                        <button class="btn btn-outline" type="button" onclick="GitHubUI.openTokenSettings()">🔑 GitHub Token</button>
+                        <button class="btn btn-outline" type="button" onclick="GitHubUI.openSaveModal()">📤 Save to GitHub</button>
+                    </div>
+                </div>
+
                 <div class="settings-section settings-info">
                     <p class="help-text">
                         ✅ Your API keys are stored locally on your iPhone using browser storage (localStorage)
@@ -1128,5 +1142,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="app.js"></script>
+    <!-- GitHub Bridge: save generated content to phone-studio repo -->
+    <script src="github-client.js"></script>
+    <script src="github-ui.js"></script>
 </body>
 </html>

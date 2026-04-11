@@ -1,0 +1,192 @@
+# ============================================================
+# ingest-outputs.yml
+# PURPOSE: Auto-index all Phone Studio outputs pushed to
+#          context/screenshots, context/conversations,
+#          context/approvals, and context/scratch.
+#
+# TRIGGERS:
+#   - Push to context/** (any new file from Phone Studio app)
+#   - Weekly schedule (Sunday midnight PT) to catch gaps
+#   - Manual dispatch (run anytime from GitHub Actions tab)
+#
+# RESULT:
+#   - Creates/updates INDEX.md in each context/ subdirectory
+#   - Lists all files newest-first with date + title
+#   - Adds tags and status so Obsidian can filter/link them
+#   - Commits automatically ([skip ci] to avoid loops)
+#
+# OBSIDIAN COMPATIBILITY:
+#   - INDEX.md uses standard Markdown table (renders in Obsidian)
+#   - Wiki-link format for backlinks: [[filename-without-extension]]
+#   - Compatible with obsidian-git auto-pull every 5 min
+# ============================================================
+
+name: Ingest Phone Studio Outputs
+
+on:
+  push:
+    paths:
+      - 'context/**'   # Fires whenever Phone Studio saves any file
+  schedule:
+    - cron: '0 7 * * 0'  # Sunday midnight PT (UTC-7) = 07:00 UTC
+  workflow_dispatch:       # Allow manual runs from Actions tab
+
+jobs:
+  index:
+    name: Build context indexes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write     # Required to commit INDEX.md files
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history so we can detect new files
+
+      # ── 2. Python setup ──────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install python-frontmatter
+
+      # ── 3. Index all context directories ─────────────────
+      - name: Build INDEX.md for each context directory
+        run: |
+          python - <<'PYEOF'
+          import os
+          import glob
+          import frontmatter          # python-frontmatter
+          from datetime import datetime, timezone
+
+          # Directories to index
+          DIRS = [
+              'context/screenshots',
+              'context/conversations',
+              'context/approvals',
+              'context/scratch',
+          ]
+
+          def extract_meta(filepath):
+              """Read frontmatter from a markdown file."""
+              try:
+                  post = frontmatter.load(filepath)
+                  return {
+                      'title': post.get('title', ''),
+                      'type':  post.get('type', ''),
+                      'status': post.get('status', ''),
+                      'tags':  post.get('tags', []),
+                      'llm':   post.get('llm', ''),
+                  }
+              except Exception:
+                  return {'title': '', 'type': '', 'status': '', 'tags': [], 'llm': ''}
+
+          def slug_to_title(basename):
+              """Turn 2026-04-11-cool-caption.md → Cool Caption."""
+              name = basename.replace('.md', '')
+              # Strip leading date (YYYY-MM-DD-)
+              if len(name) > 11 and name[10] == '-':
+                  name = name[11:]
+              return name.replace('-', ' ').title()
+
+          def build_wiki_link(basename):
+              """[[filename-no-extension]] for Obsidian backlinks."""
+              return '[[' + basename.replace('.md', '') + ']]'
+
+          now_utc = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+
+          for directory in DIRS:
+              # Ensure directory exists
+              os.makedirs(directory, exist_ok=True)
+
+              # Gather .md files, exclude INDEX.md itself
+              pattern = os.path.join(directory, '*.md')
+              all_files = sorted(
+                  [f for f in glob.glob(pattern) if not f.endswith('INDEX.md')],
+                  reverse=True   # Newest first (YYYY-MM-DD prefix sorts correctly)
+              )
+
+              dir_label = directory.split('/')[-1].title()
+              rows = []
+
+              for filepath in all_files:
+                  basename = os.path.basename(filepath)
+                  date = basename[:10] if len(basename) > 10 else 'unknown'
+                  meta = extract_meta(filepath)
+
+                  title = meta['title'] or slug_to_title(basename)
+                  ctype = meta['type'] or '—'
+                  status = meta['status'] or 'inbox'
+                  tags_raw = meta['tags']
+                  tags = ' '.join(f'#{t}' for t in tags_raw) if tags_raw else '—'
+                  wiki = build_wiki_link(basename)
+
+                  rows.append(
+                      f'| {date} | {wiki} | {title} | {ctype} | {status} | {tags} |'
+                  )
+
+              row_block = '\n'.join(rows) if rows else '| — | — | No files yet | — | — | — |'
+
+              index_content = f"""---
+generated: "{now_utc}"
+directory: "{directory}"
+file_count: {len(all_files)}
+type: index
+---
+
+# {dir_label} Index
+
+> Auto-generated by Phone Studio · Last updated: **{now_utc}**
+> {len(all_files)} file(s) · Sorted newest first
+
+| Date | File | Title | Type | Status | Tags |
+|------|------|-------|------|--------|------|
+{row_block}
+
+---
+
+## How to use this index
+
+- **Backlink**: Type `[[` in any Obsidian note to link to files listed above
+- **Search**: Use Obsidian quick-switcher (Cmd+O / tap search) to find by title
+- **Filter by tag**: Click any `#tag` in Obsidian to see all tagged notes
+- **Sync**: This file updates automatically within seconds of a new push
+
+## Directory purpose
+
+| Directory | Purpose |
+|-----------|---------|
+| `context/screenshots` | Raw OCR outputs and LLM-generated captions from screenshots |
+| `context/conversations` | Saved Perplexity Computer conversations |
+| `context/approvals` | Approved, final content — source of truth |
+| `context/scratch` | In-progress drafts, not yet approved |
+"""
+
+              index_path = os.path.join(directory, 'INDEX.md')
+              with open(index_path, 'w') as f:
+                  f.write(index_content)
+
+              print(f'✓ Indexed {len(all_files)} files → {index_path}')
+
+          print(f'\nAll indexes updated at {now_utc}')
+          PYEOF
+
+      # ── 4. Commit changes ────────────────────────────────
+      - name: Commit INDEX.md updates
+        run: |
+          git config user.name  "Phone Studio Bot"
+          git config user.email "bot@phone-studio"
+          git add context/*/INDEX.md
+          # Only commit if there are actual changes
+          if git diff --cached --quiet; then
+            echo "No index changes to commit."
+          else
+            CHANGED=$(git diff --cached --name-only | tr '\n' ' ')
+            git commit -m "auto: update indexes for $CHANGED [skip ci]"
+            git push
+            echo "✓ Pushed updated indexes."
+          fi
